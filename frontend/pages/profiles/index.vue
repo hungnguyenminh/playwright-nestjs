@@ -2,6 +2,7 @@
 import type { Job, Profile } from '~/types/api';
 
 const { api } = useApi();
+const { isPhone } = useBreakpoint();
 const profiles = ref<Profile[]>([]);
 const loading = ref(false);
 
@@ -14,6 +15,10 @@ const dialog = reactive({
   proxyUser: '',
   proxyPass: '',
   emulationText: '{}',
+  /** Open with the AI assistant expanded. */
+  ai: false,
+  /** Remounts the assistant (fresh conversation) each time the dialog opens. */
+  session: 0,
 });
 
 async function load() {
@@ -23,7 +28,7 @@ async function load() {
 }
 load();
 
-function edit(p?: Profile) {
+function edit(p?: Profile, ai = false) {
   Object.assign(dialog, {
     open: true,
     id: p?._id ?? '',
@@ -33,6 +38,36 @@ function edit(p?: Profile) {
     proxyUser: p?.proxy?.username ?? '',
     proxyPass: p?.proxy?.password ?? '',
     emulationText: JSON.stringify(p?.emulation ?? {}, null, 2),
+    ai,
+    session: dialog.session + 1,
+  });
+}
+
+function currentProfileForm(): Record<string, unknown> {
+  if (!dialog.id && !dialog.name && !dialog.proxyServer && dialog.emulationText.trim() === '{}') return {};
+  let emulation: unknown = dialog.emulationText;
+  try {
+    emulation = JSON.parse(dialog.emulationText);
+  } catch {
+    // keep the raw text so the AI can see (and fix) it
+  }
+  return {
+    name: dialog.name,
+    notes: dialog.notes,
+    proxy: dialog.proxyServer ? { server: dialog.proxyServer, username: dialog.proxyUser, password: dialog.proxyPass ? '(set)' : '' } : null,
+    emulation,
+  };
+}
+
+function applyProfileAi(p: Record<string, any>) {
+  Object.assign(dialog, {
+    name: p.name || dialog.name,
+    notes: p.notes ?? dialog.notes,
+    proxyServer: p.proxy?.server ?? '',
+    proxyUser: p.proxy?.username ?? '',
+    // Never overwrite a password the user typed with an empty AI value.
+    proxyPass: p.proxy?.password || dialog.proxyPass,
+    emulationText: JSON.stringify(p.emulation ?? {}, null, 2),
   });
 }
 
@@ -104,40 +139,52 @@ async function openForLogin(p: Profile) {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="m-0 text-xl font-semibold">Chrome profiles</h1>
-      <el-button type="primary" @click="edit()">New profile</el-button>
-    </div>
-    <el-alert type="info" :closable="false" show-icon>
-      A profile is a separate Chrome user-data folder: cookies and logins persist between jobs. Each profile runs in its own
-      Chrome process, one task at a time. Do not point it at your everyday Chrome profile.
-    </el-alert>
+  <div class="page">
+    <PageHeader
+      title="Chrome profiles"
+      subtitle="Mỗi profile là một thư mục dữ liệu Chrome riêng: giữ cookie và đăng nhập giữa các lần chạy, mỗi lúc một task."
+    >
+      <template #actions>
+        <el-button color="#7c3aed" plain @click="edit(undefined, true)">✨ Tạo bằng AI</el-button>
+        <el-button type="primary" @click="edit()">+ Profile mới</el-button>
+      </template>
+    </PageHeader>
 
-    <el-card shadow="never">
+    <el-card shadow="never" body-class="!p-0">
       <el-table v-loading="loading" :data="profiles">
-        <el-table-column label="Name" prop="name" min-width="160" />
-        <el-table-column label="Notes" prop="notes" min-width="200" show-overflow-tooltip />
+        <el-table-column label="Tên" min-width="160">
+          <template #default="{ row }"><span class="font-medium">{{ row.name }}</span></template>
+        </el-table-column>
+        <el-table-column label="Ghi chú" prop="notes" min-width="200" show-overflow-tooltip />
         <el-table-column label="Proxy" min-width="160">
           <template #default="{ row }">{{ row.proxy?.server ?? '—' }}</template>
         </el-table-column>
-        <el-table-column label="Last used" width="180">
-          <template #default="{ row }">{{ row.lastUsedAt ? new Date(row.lastUsedAt).toLocaleString() : '—' }}</template>
+        <el-table-column label="Dùng lần cuối" width="170">
+          <template #default="{ row }">{{ row.lastUsedAt ? fmtDate(row.lastUsedAt) : '—' }}</template>
         </el-table-column>
         <el-table-column label="" width="90">
-          <template #default="{ row }"><el-tag v-if="row.inUse" size="small" type="warning">in use</el-tag></template>
+          <template #default="{ row }"><el-tag v-if="row.inUse" size="small" type="warning">đang dùng</el-tag></template>
         </el-table-column>
-        <el-table-column width="290" align="right">
+        <el-table-column width="290" align="right" :fixed="isPhone ? false : 'right'">
           <template #default="{ row }">
-            <el-button size="small" type="primary" plain :disabled="row.inUse" @click="openForLogin(row as Profile)">Open to log in</el-button>
-            <el-button size="small" @click="edit(row as Profile)">Edit</el-button>
-            <el-button size="small" type="danger" plain :disabled="row.inUse" @click="remove(row as Profile)">Delete</el-button>
+            <el-button size="small" type="primary" plain :disabled="row.inUse" @click="openForLogin(row as Profile)">Mở để đăng nhập</el-button>
+            <el-button size="small" @click="edit(row as Profile)">Sửa</el-button>
+            <el-button size="small" type="danger" plain :disabled="row.inUse" @click="remove(row as Profile)">Xoá</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-dialog v-model="dialog.open" :title="dialog.id ? 'Edit profile' : 'New profile'" width="560px">
+    <el-dialog v-model="dialog.open" :title="dialog.id ? 'Sửa profile' : 'Profile mới'" :width="dialog.ai ? '820px' : '600px'" top="6vh">
+      <AiAssistPanel
+        :key="dialog.session"
+        kind="profile"
+        class="!mb-4"
+        :current-form="currentProfileForm"
+        :start-open="dialog.ai"
+        placeholder="Ví dụ: profile cho tài khoản Shopee thứ 2, dùng proxy Việt Nam, tiếng Việt, màn hình 1440x900"
+        @accept="applyProfileAi"
+      />
       <el-form label-position="top">
         <el-form-item label="Name"><el-input v-model="dialog.name" /></el-form-item>
         <el-form-item label="Notes"><el-input v-model="dialog.notes" /></el-form-item>

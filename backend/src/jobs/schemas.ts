@@ -33,6 +33,10 @@ export class Job {
   @Prop({ type: SchemaTypes.ObjectId, index: true })
   scriptId?: Types.ObjectId;
 
+  /** Set when the job was started from a saved flow (Luồng). */
+  @Prop({ type: SchemaTypes.ObjectId, index: true })
+  flowId?: Types.ObjectId;
+
   /** Snapshot of the script at creation, so later edits don't affect the job. */
   @Prop({ type: SchemaTypes.Mixed, required: true })
   actions: Action[];

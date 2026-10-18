@@ -6,12 +6,16 @@ function splitCsvLine(line: string, sep: string): string[] {
   for (let i = 0; i < line.length; i++) {
     const ch = line[i];
     if (quoted) {
-      if (ch === '"' && line[i + 1] === '"') (cur += '"'), i++;
-      else if (ch === '"') quoted = false;
+      if (ch === '"' && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else if (ch === '"') quoted = false;
       else cur += ch;
     } else if (ch === '"') quoted = true;
-    else if (ch === sep) cells.push(cur), (cur = '');
-    else cur += ch;
+    else if (ch === sep) {
+      cells.push(cur);
+      cur = '';
+    } else cur += ch;
   }
   cells.push(cur);
   return cells.map((c) => c.trim());
@@ -35,7 +39,8 @@ export function parseInputs(text: string): Record<string, unknown>[] {
   const lines = src.split(/\r?\n/).filter((l) => l.trim());
   const sep = lines[0].includes('\t') ? '\t' : ',';
   const headers = splitCsvLine(lines[0], sep);
-  if (headers.some((h) => !h)) throw new Error('CSV header has an empty column name');
+  if (headers.some((h) => !h))
+    throw new Error('CSV header has an empty column name');
   return lines.slice(1).map((line) => {
     const cells = splitCsvLine(line, sep);
     return Object.fromEntries(headers.map((h, i) => [h, cells[i] ?? '']));

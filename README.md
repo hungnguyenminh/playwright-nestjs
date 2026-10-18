@@ -60,6 +60,21 @@ Mọi action đều nhận `timeout`, `optional: true` (lỗi thì bỏ qua) và
 ]
 ```
 
+## Luồng và Dữ liệu
+
+- **Luồng** (menu *Luồng*): mỗi việc mới gom profile (nếu cần đăng nhập) + script + inputs + cách chạy. Wizard *Tạo luồng mới* đi qua 5 bước: mục tiêu → profile (tạo mới và đăng nhập ngay trong trang) → script (có sẵn / tự viết / AI, có chạy thử) → job & task → xác nhận. Trang chi tiết luồng có nút *Chạy ngay*, *Chạy với input khác*, lịch sử các lần chạy, và link tới dữ liệu.
+- **Dữ liệu** (menu *Dữ liệu*): kết quả của mọi task chạy xong được tự lưu vào collection `records`, theo luồng (hoặc script, nếu chạy ngoài luồng) và theo tên biến kết quả (ví dụ `posts`). Mảng object → mỗi phần tử 1 dòng; các giá trị đơn (title, price…) → 1 dòng mỗi task trong bộ "kết quả". Mục có cùng `url` / `link` / `href` / `id` được gộp qua các lần chạy (lưu thời điểm gặp lần đầu, lần cuối và số lần gặp). Dữ liệu vẫn còn khi xoá job. Có tìm kiếm, tải CSV (có BOM để Excel đọc đúng tiếng Việt) và JSON. Lần đầu khởi động sau khi có tính năng này, kết quả của các task đã chạy trước đó được nhập vào luôn.
+
+
+## Trợ lý AI ("Tạo bằng AI")
+
+Các trang **Script**, **Profile** (nút *✨ Tạo bằng AI*) và **New job** có khung *Tạo bằng AI*. Bạn mô tả yêu cầu bằng chữ; AI (Claude) viết một hướng dẫn hiện dần trên trang và đề xuất giá trị cho form. **Accept** chỉ điền vào form; việc lưu hay chạy vẫn do bạn bấm.
+
+- **Cấu hình**: vào trang **Cài đặt → AI**, nhập Base URL (để trống là dùng `api.anthropic.com`; hoặc gateway tương thích Anthropic Messages API), loại token (API key hoặc Bearer), token, model (mặc định `claude-opus-5-5`) và effort. Có nút *Kiểm tra kết nối* và *Lấy danh sách model*. Token được mã hoá AES-256-GCM trong MongoDB bằng khoá `SETTINGS_SECRET` trong `backend/.env` (tự tạo ở lần chạy đầu; **đừng đổi khoá này**, nếu đổi thì phải nhập lại token). API không bao giờ trả lại token, chỉ trả 4 ký tự cuối. Nếu chưa lưu gì trên UI, backend dùng `ANTHROPIC_API_KEY` / `ANTHROPIC_AUTH_TOKEN` / `ANTHROPIC_BASE_URL` / `AI_MODEL` trong `.env`.
+- **Đọc trang trước khi viết** (Script, New job): backend mở trang bằng Chrome headless (có thể dùng profile đã đăng nhập), gửi cho AI cấu trúc rút gọn của trang (selector ổn định, danh sách lặp lại, thuộc tính đáng chú ý) cùng ảnh chụp màn hình, để selector khớp với trang thật thay vì phải đoán.
+- **Nhờ AI sửa**: trên task bị lỗi, AI nhận bước lỗi, thông báo lỗi, log, script đang dùng và ảnh chụp lúc lỗi, rồi đề xuất bản sửa. Sau khi Accept, nút *Lưu & chạy lại task lỗi* lưu script và chạy lại các task lỗi của job bằng script mới (`POST /jobs/:id/retry { useLatestScript: true }`).
+- Đề xuất được kiểm tra bằng đúng các luật mà app dùng khi lưu: schema action, biến, id script/profile có tồn tại. Nếu sai, lỗi được gửi lại cho AI để tự sửa (tối đa 3 lượt) trước khi hiện kết quả.
+
 ## API
 
 ```
@@ -67,11 +82,18 @@ GET/POST /scripts            GET/PUT/DELETE /scripts/:id
 GET/POST /profiles           GET/PUT/DELETE /profiles/:id
 POST /jobs                   { scriptId | actions, inputs[], vars?, concurrency?, headless?, profileId?, maxRetries?, stepTimeout? }
 GET  /jobs?status=&page=&limit=          GET /jobs/:id    GET /jobs/:id/tasks
-POST /jobs/:id/cancel        POST /jobs/:id/retry          DELETE /jobs/:id
+POST /jobs/:id/cancel        POST /jobs/:id/retry { useLatestScript? }        DELETE /jobs/:id
 GET  /tasks/:id   /tasks/:id/logs   /tasks/:id/artifacts
 POST /tasks/:id/cancel       POST /tasks/:id/pause         POST /tasks/:id/resume
 GET  /artifacts/:id[?download=1]
 GET  /actions/schema         POST /actions/validate        GET /system
+GET/PUT /settings/ai         POST /settings/ai/test        POST /settings/ai/models
+GET/POST /flows              GET/PUT/DELETE /flows/:id     POST /flows/:id/run { inputsText?, vars?, headless? }     GET /flows/:id/jobs
+GET  /data/datasets          GET /data/records?scope=&dataset=&q=&page=&limit=
+GET  /data/export?scope=&dataset=&format=csv|json            DELETE /data/records?scope=&dataset=    DELETE /data/records/:id
+GET  /ai/status
+POST /ai/assist              { kind: 'script'|'profile'|'job', prompt, history?, currentForm?, snapshotUrl?, snapshotProfileId?, fixTaskId? }
+                             → server-sent events: status, snapshot, text, proposal, error, done
 ```
 
 Socket.IO, namespace `/live`:

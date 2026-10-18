@@ -22,6 +22,11 @@ export class CreateJobDto {
   @IsMongoId()
   scriptId?: string;
 
+  /** The flow (Luồng) this run belongs to. */
+  @IsOptional()
+  @IsMongoId()
+  flowId?: string;
+
   /** ...or inline actions (wins over the script's actions if both are given). */
   @IsOptional()
   @IsArray()

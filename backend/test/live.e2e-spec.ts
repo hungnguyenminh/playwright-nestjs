@@ -6,7 +6,6 @@ import request from 'supertest';
 import { AppModule } from './../src/app.module.js';
 
 /** Needs MongoDB and Google Chrome, like app.e2e-spec.ts. */
-process.env.MONGODB_URI ??= 'mongodb://localhost:27017/browser-automation-test';
 
 const FORM = 'data:text/html,' + encodeURIComponent(
   `<body style="margin:0"><input id="q" style="position:absolute;left:100px;top:100px;width:200px;height:30px"></body>`,

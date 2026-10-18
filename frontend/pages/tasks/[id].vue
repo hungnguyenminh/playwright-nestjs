@@ -68,36 +68,39 @@ async function cancel() {
   await tryApi(() => api(`/tasks/${id.value}/cancel`, { method: 'POST' }), 'Cancelling…');
 }
 
-const resultText = computed(() => JSON.stringify(task.value?.result ?? {}, null, 2));
+/** Opens the script editor (or a new script for inline jobs) with the AI diagnosing this task. */
+async function fixWithAi() {
+  const job = await tryApi(() => api<{ scriptId?: string }>(`/jobs/${task.value!.jobId}`));
+  if (!job) return;
+  navigateTo({ path: `/scripts/${job.scriptId ?? 'new'}`, query: { aiFix: id.value } });
+}
+
 const formatSize = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.ceil(n / 1024)} KB`);
 const images = computed(() => artifacts.value.filter((a) => a.mime.startsWith('image/')).map((a) => artifactUrl(a._id)));
 </script>
 
 <template>
-  <div v-if="task" class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <el-button text @click="navigateTo(`/jobs/${task.jobId}`)">←</el-button>
-        <h1 class="m-0 text-xl font-semibold">{{ task.name }}</h1>
-        <StatusTag :status="task.status" />
-        <span class="text-sm text-gray-500">attempt {{ task.attempt }}</span>
-      </div>
-      <div class="flex gap-2">
+  <div v-if="task" class="page">
+    <PageHeader :title="task.name" :back="`/jobs/${task.jobId}`">
+      <template #badge><StatusTag :status="task.status" /></template>
+      <template #subtitle>Lần thử {{ task.attempt }}<span v-if="task.startedAt"> · bắt đầu {{ fmtDate(task.startedAt) }}</span></template>
+      <template #actions>
         <el-button v-if="task.status === 'running'" :loading="pausing" @click="pause">
-          {{ pausing ? 'Pausing after this step…' : 'Pause' }}
+          {{ pausing ? 'Sẽ dừng sau bước này…' : '⏸ Tạm dừng' }}
         </el-button>
         <template v-if="task.status === 'paused'">
-          <el-switch v-model="control" active-text="Take control" class="mr-2" />
-          <el-button type="success" @click="resume">Resume</el-button>
+          <el-switch v-model="control" active-text="Điều khiển tay" class="mr-2" />
+          <el-button type="success" @click="resume">▶ Resume</el-button>
         </template>
-        <el-button v-if="live || task.status === 'queued'" type="warning" @click="cancel">Cancel task</el-button>
-      </div>
-    </div>
+        <el-button v-if="live || task.status === 'queued'" type="warning" plain @click="cancel">Huỷ task</el-button>
+        <el-button v-if="task.status === 'failed'" color="#7c3aed" @click="fixWithAi">✨ Nhờ AI sửa</el-button>
+      </template>
+    </PageHeader>
 
     <el-alert v-if="task.status === 'paused'" type="warning" :closable="false" show-icon :title="task.pauseMessage || 'Paused'"
-      description="Turn on “Take control” to use mouse and keyboard on the live view (or use the Chrome window in headed mode), then press Resume." />
+      description="Bật “Điều khiển tay” để dùng chuột và bàn phím ngay trên màn hình live (hoặc thao tác trên cửa sổ Chrome nếu chạy headed), xong bấm Resume." />
     <el-alert v-if="task.error && task.status !== 'running'" type="error" :closable="false" show-icon
-      :title="task.error.stepPath ? `Failed at step ${task.error.stepPath} (${task.error.actionType})` : 'Failed'"
+      :title="task.error.stepPath ? `Lỗi ở bước ${task.error.stepPath} (${task.error.actionType})` : 'Lỗi'"
       :description="task.error.message" />
 
     <div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
@@ -116,30 +119,28 @@ const images = computed(() => artifacts.value.filter((a) => a.mime.startsWith('i
           <div v-else-if="images.length" class="overflow-hidden rounded bg-gray-900">
             <img :src="images.at(-1)" class="w-full" alt="last screenshot" />
           </div>
-          <div v-else class="flex aspect-video items-center justify-center rounded bg-gray-100 text-sm text-gray-500">
-            Task is {{ task.status }}
+          <div v-else class="flex aspect-video flex-col items-center justify-center gap-2 rounded-lg bg-slate-50 text-sm text-slate-500">
+            <StatusTag :status="task.status" />
+            <span v-if="task.status === 'done'">Không có ảnh chụp: xem kết quả bên dưới.</span>
           </div>
-          <div class="mt-2 truncate px-1 text-xs text-gray-500" :title="task.currentUrl">
-            <span v-if="live && task.currentStep" class="mr-2 text-blue-600">step {{ task.currentStep }}</span>{{ task.currentUrl || '—' }}
+          <div class="mt-2 flex items-center gap-2 truncate px-1 text-xs text-slate-500" :title="task.currentUrl">
+            <span v-if="live && task.currentStep" class="rounded bg-indigo-50 px-1.5 py-0.5 font-medium text-indigo-600">bước {{ task.currentStep }}</span>
+            <span class="truncate">{{ task.currentUrl || '—' }}</span>
           </div>
         </el-card>
 
-        <el-card shadow="never" header="Steps" body-class="!p-0">
+        <el-card shadow="never" header="Các bước" body-class="!p-0">
           <div class="h-80"><StepLog :logs="logs" /></div>
         </el-card>
       </div>
 
       <div class="space-y-4 xl:col-span-2">
-        <el-card shadow="never" header="Result">
-          <pre class="m-0 max-h-96 overflow-auto rounded bg-gray-50 p-2 text-xs">{{ resultText }}</pre>
-        </el-card>
-
-        <el-card shadow="never" header="Variables">
+        <el-card shadow="never" header="Biến đầu vào">
           <pre class="m-0 max-h-48 overflow-auto rounded bg-gray-50 p-2 text-xs">{{ JSON.stringify(task.vars, null, 2) }}</pre>
         </el-card>
 
-        <el-card shadow="never" :header="`Artifacts (${artifacts.length})`">
-          <el-empty v-if="!artifacts.length" :image-size="50" description="None" />
+        <el-card shadow="never" :header="`Ảnh chụp & file (${artifacts.length})`">
+          <el-empty v-if="!artifacts.length" :image-size="50" description="Chưa có" />
           <div v-for="a in artifacts" :key="a._id" class="mb-3 flex items-center gap-3">
             <el-image
               v-if="a.mime.startsWith('image/')"
@@ -155,12 +156,16 @@ const images = computed(() => artifacts.value.filter((a) => a.mime.startsWith('i
             </div>
             <div class="min-w-0 grow text-sm">
               <div class="truncate">{{ a.name }}</div>
-              <div class="text-xs text-gray-400">{{ formatSize(a.size) }} · {{ new Date(a.createdAt).toLocaleTimeString() }}</div>
+              <div class="text-xs text-gray-400">{{ formatSize(a.size) }} · {{ fmtTime(a.createdAt) }}</div>
             </div>
-            <a :href="artifactUrl(a._id, true)" class="text-sm">Download</a>
+            <a :href="artifactUrl(a._id, true)" class="text-sm">Tải về</a>
           </div>
         </el-card>
       </div>
     </div>
+
+    <el-card shadow="never" header="Kết quả">
+      <ResultView :result="task.result" />
+    </el-card>
   </div>
 </template>

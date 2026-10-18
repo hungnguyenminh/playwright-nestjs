@@ -28,6 +28,6 @@ import {
   ],
   controllers: [JobsController, TasksController],
   providers: [JobsService, JobRunnerService],
-  exports: [JobRunnerService],
+  exports: [JobRunnerService, JobsService],
 })
 export class JobsModule {}

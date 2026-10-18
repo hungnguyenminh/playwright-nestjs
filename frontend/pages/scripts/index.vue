@@ -2,6 +2,7 @@
 import type { Script } from '~/types/api';
 
 const { api } = useApi();
+const { isPhone } = useBreakpoint();
 const scripts = ref<Script[]>([]);
 const loading = ref(false);
 
@@ -24,23 +25,26 @@ async function remove(s: Script) {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div class="flex items-center justify-between">
-      <h1 class="m-0 text-xl font-semibold">Scripts</h1>
-      <el-button type="primary" @click="navigateTo('/scripts/new')">New script</el-button>
-    </div>
-    <el-card shadow="never">
+  <div class="page">
+    <PageHeader title="Scripts" subtitle="Các kịch bản thao tác trình duyệt (DSL JSON), dùng lại trong job và luồng.">
+      <template #actions>
+        <el-button type="primary" @click="navigateTo('/scripts/new')">+ Script mới</el-button>
+      </template>
+    </PageHeader>
+    <el-card shadow="never" body-class="!p-0">
       <el-table v-loading="loading" :data="scripts" @row-click="(row: any) => navigateTo(`/scripts/${row._id}`)">
-        <el-table-column label="Name" prop="name" min-width="200" />
-        <el-table-column label="Description" prop="description" min-width="300" show-overflow-tooltip />
-        <el-table-column label="Updated" width="180">
-          <template #default="{ row }">{{ new Date(row.updatedAt).toLocaleString() }}</template>
+        <el-table-column label="Tên" min-width="220">
+          <template #default="{ row }"><span class="font-medium">{{ row.name }}</span></template>
         </el-table-column>
-        <el-table-column width="200" align="right">
+        <el-table-column label="Mô tả" prop="description" min-width="300" show-overflow-tooltip />
+        <el-table-column label="Cập nhật" width="170">
+          <template #default="{ row }">{{ fmtDate(row.updatedAt) }}</template>
+        </el-table-column>
+        <el-table-column width="170" align="right" :fixed="isPhone ? false : 'right'">
           <template #default="{ row }">
             <div @click.stop>
-              <el-button size="small" type="primary" plain @click="navigateTo(`/jobs/new?scriptId=${row._id}`)">Run</el-button>
-              <el-button size="small" type="danger" plain @click="remove(row as Script)">Delete</el-button>
+              <el-button size="small" type="primary" plain @click="navigateTo(`/jobs/new?scriptId=${row._id}`)">▶ Chạy</el-button>
+              <el-button size="small" type="danger" plain @click="remove(row as Script)">Xoá</el-button>
             </div>
           </template>
         </el-table-column>

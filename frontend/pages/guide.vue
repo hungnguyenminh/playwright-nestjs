@@ -204,10 +204,10 @@ const groupedActions = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-6xl space-y-4">
-    <h1 class="m-0 text-xl font-semibold">Hướng dẫn</h1>
+  <div class="page !max-w-6xl">
+    <PageHeader title="Hướng dẫn" subtitle="Khái niệm, cách dùng từng bước và tra cứu mọi action của script." />
 
-    <el-tabs v-model="tab" class="guide rounded bg-white px-5 pb-5 pt-2">
+    <el-tabs v-model="tab" class="guide rounded-xl border border-slate-200/70 bg-white px-6 pb-6 pt-2 shadow-sm">
       <!-- ============================== KHÁI NIỆM ============================== -->
       <el-tab-pane label="Khái niệm" name="concepts">
         <p class="text-gray-600">
@@ -355,9 +355,65 @@ Inputs:
       <!-- ============================== HƯỚNG DẪN ============================== -->
       <el-tab-pane label="Hướng dẫn sử dụng" name="howto">
         <el-alert type="info" :closable="false" show-icon class="!mb-6">
-          Thứ tự làm: <b>1. Tạo script</b> → <b>2. Tạo profile</b> (chỉ khi trang cần đăng nhập) → <b>3. Tạo job</b> →
+          Cách nhanh nhất: <b>Luồng → Tạo luồng mới</b> đi qua đủ các bước. Làm tay thì theo thứ tự: <b>1. Tạo script</b> → <b>2. Tạo profile</b> (chỉ khi trang cần đăng nhập) → <b>3. Tạo job</b> →
           <b>4. Theo dõi task và lấy kết quả</b>.
         </el-alert>
+
+        <!-- Flows -->
+        <section class="mb-10">
+          <h2 class="mt-0">Cách dễ theo dõi nhất: tạo một Luồng</h2>
+          <p>
+            Mỗi việc mới (ví dụ "lấy bài mới trong nhóm X", "theo dõi giá sản phẩm Y") nên tạo thành một <b>Luồng</b>.
+            Luồng gom profile + script + cách chạy; lần sau chỉ cần bấm <b>▶ Chạy</b>, và mọi lần chạy cùng dữ liệu được xem ở một chỗ.
+          </p>
+          <ol class="space-y-1 pl-5">
+            <li>Vào <NuxtLink to="/flows">Luồng</NuxtLink> → <b>+ Tạo luồng mới</b>, rồi làm lần lượt 5 bước:</li>
+            <li><b>Mục tiêu</b>: đặt tên, chọn trang có cần đăng nhập không.</li>
+            <li><b>Profile</b> (nếu cần đăng nhập): chọn profile có sẵn hoặc tạo mới, bấm <b>Mở Chrome để đăng nhập</b>, đăng nhập rồi <b>Resume</b> ngay trong trang.</li>
+            <li><b>Script</b>: chọn script có sẵn, tự viết, hoặc <b>Tạo bằng AI</b>; bấm <b>Chạy thử 1 lần</b> để kiểm tra.</li>
+            <li><b>Job &amp; task</b>: dán danh sách đầu vào (mỗi dòng 1 task; nút <b>Tạo mẫu Inputs</b> điền sẵn các cột script cần), chọn số chạy song song.</li>
+            <li><b>Xác nhận</b>: <b>Lưu luồng</b> hoặc <b>Lưu &amp; chạy ngay</b>.</li>
+          </ol>
+          <p>
+            Trang chi tiết luồng hiện 4 bước, lịch sử các lần chạy, và link tới dữ liệu đã lấy.
+            Dữ liệu của mọi task chạy xong được tự lưu vào trang <NuxtLink to="/data">Dữ liệu</NuxtLink>: xem dạng bảng, tìm kiếm,
+            tải CSV (mở được bằng Excel) hoặc JSON. Mục trùng (cùng url hoặc id) qua nhiều lần chạy được gộp lại, và dữ liệu vẫn còn khi xoá job.
+          </p>
+        </section>
+
+        <!-- 0. AI -->
+        <section class="mb-10">
+          <h2 class="mt-0">Cách nhanh: Tạo bằng AI</h2>
+          <p>
+            Các trang <b>Script</b>, <b>Profiles</b> (nút <b>✨ Tạo bằng AI</b>) và <b>New job</b> có khung <b>Tạo bằng AI</b>.
+            Bạn mô tả yêu cầu bằng chữ, AI viết hướng dẫn ngay trong trang và đề xuất cách điền form.
+          </p>
+          <ol class="space-y-2 pl-5">
+            <li>
+              Lần đầu: vào <NuxtLink to="/settings">Cài đặt → AI</NuxtLink>, nhập <b>token</b> (API key Anthropic, hoặc token của gateway),
+              <b>model</b> (mặc định <code>claude-opus-5-5</code>), và <b>Base URL</b> nếu dùng gateway. Bấm <b>Kiểm tra kết nối</b> rồi <b>Lưu</b>.
+              Token được mã hoá khi lưu và không bao giờ hiện lại đầy đủ.
+            </li>
+            <li>
+              Mở khung <b>Tạo bằng AI</b>, gõ yêu cầu, ví dụ:
+              <i>"Mở https://quotes.toscrape.com, lấy nội dung, tác giả, tag của mọi câu trích dẫn, đi qua tất cả các trang"</i>.
+            </li>
+            <li>
+              Nên tick <b>Đọc trang trước khi viết</b> (trang Script / New job): AI được xem cấu trúc và ảnh chụp trang thật nên chọn selector chính xác.
+              Với trang cần đăng nhập, chọn thêm profile đã đăng nhập.
+            </li>
+            <li>
+              Đọc hướng dẫn AI viết ra, xem phần <b>Sẽ điền vào form</b> (đã được kiểm tra hợp lệ), rồi bấm <b>Accept: điền vào form</b>.
+              Chưa ưng thì gõ yêu cầu chỉnh (ví dụ "cuộn 30 lần", "thêm chụp ảnh") để AI sửa tiếp.
+            </li>
+            <li><b>Accept chỉ điền vào form</b>: bạn vẫn tự kiểm tra rồi bấm Save / Start. AI không tự lưu hay tự chạy gì.</li>
+            <li>
+              Task bị lỗi: trên trang task bấm <b>✨ Nhờ AI sửa</b>. AI xem bước lỗi, log và ảnh chụp lúc lỗi, giải thích nguyên nhân và đề xuất bản sửa;
+              Accept rồi bấm <b>Lưu &amp; chạy lại task lỗi</b>.
+            </li>
+          </ol>
+          <p class="text-sm text-gray-500">Các phần dưới đây hướng dẫn làm bằng tay, đồng thời giúp bạn hiểu và kiểm tra những gì AI đề xuất.</p>
+        </section>
 
         <!-- 1. Script -->
         <section class="mb-10">

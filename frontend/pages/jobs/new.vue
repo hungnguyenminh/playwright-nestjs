@@ -37,6 +37,42 @@ onMounted(async () => {
 
 const selectedScript = computed(() => scripts.value.find((s) => s._id === form.scriptId));
 
+// ---- AI assistant ------------------------------------------------------------
+function currentJobForm(): Record<string, unknown> {
+  const touched = form.scriptId || form.inputsText.trim() || form.varsText.trim() || form.name || form.profileId;
+  if (!touched) return {};
+  return {
+    source: form.source,
+    scriptId: form.scriptId,
+    scriptName: selectedScript.value?.name,
+    actions: form.source === 'inline' ? form.actionsText : undefined,
+    name: form.name,
+    inputs: form.inputsText,
+    vars: form.varsText,
+    concurrency: form.concurrency,
+    headless: form.headless,
+    profileId: form.profileId,
+    maxRetries: form.maxRetries,
+    stepTimeoutSeconds: form.stepTimeout,
+  };
+}
+
+function applyJobAi(p: Record<string, any>) {
+  Object.assign(form, {
+    source: p.source === 'inline' ? 'inline' : 'script',
+    scriptId: p.scriptId || '',
+    actionsText: p.source === 'inline' ? JSON.stringify(p.actions ?? [], null, 2) : form.actionsText,
+    name: p.name ?? '',
+    inputsText: p.inputsText ?? '',
+    varsText: p.varsText ?? '',
+    concurrency: p.concurrency ?? form.concurrency,
+    headless: p.headless ?? form.headless,
+    profileId: p.profileId ?? '',
+    maxRetries: p.maxRetries ?? form.maxRetries,
+    stepTimeout: p.stepTimeout ?? form.stepTimeout,
+  });
+}
+
 const parsed = computed(() => {
   try {
     return { inputs: parseInputs(form.inputsText), error: '' };
@@ -85,14 +121,22 @@ async function submit() {
 </script>
 
 <template>
-  <div class="max-w-5xl space-y-4">
-    <h1 class="m-0 text-xl font-semibold">New job</h1>
+  <div class="page !max-w-5xl">
+    <PageHeader title="New job" subtitle="Chạy một script cho danh sách đầu vào. Muốn lưu lại để chạy nhiều lần, hãy tạo Luồng." back="/jobs" />
+
+    <AiAssistPanel
+      kind="job"
+      :current-form="currentJobForm"
+      allow-snapshot
+      placeholder="Ví dụ: chạy script Facebook cho 3 nhóm này bằng profile facebook, cuộn 20 lần: https://facebook.com/groups/…"
+      @accept="applyJobAi"
+    />
 
     <el-form label-position="top" @submit.prevent="submit">
-      <el-card shadow="never" header="What to run" class="mb-4">
+      <el-card shadow="never" header="Chạy gì" class="mb-4">
         <el-radio-group v-model="form.source" class="mb-4">
-          <el-radio-button value="script">Saved script</el-radio-button>
-          <el-radio-button value="inline">Inline actions</el-radio-button>
+          <el-radio-button value="script">Script đã lưu</el-radio-button>
+          <el-radio-button value="inline">Actions viết trực tiếp</el-radio-button>
         </el-radio-group>
 
         <template v-if="form.source === 'script'">
@@ -114,7 +158,7 @@ async function submit() {
       <el-card shadow="never" class="mb-4">
         <template #header>
           <div class="flex items-center justify-between">
-            <span>Inputs — one task per row</span>
+            <span>Inputs: mỗi dòng là một task</span>
             <span class="text-sm text-gray-500">{{ taskCount }} task(s)</span>
           </div>
         </template>
@@ -140,38 +184,38 @@ Empty = a single task with no inputs.'
           Showing 20 of {{ parsed.inputs.length }} rows
         </div>
 
-        <el-form-item label="Shared variables (JSON, optional)" class="!mb-0 mt-4">
+        <el-form-item label="Biến dùng chung (JSON, không bắt buộc)" class="!mb-0 mt-4">
           <el-input v-model="form.varsText" type="textarea" :rows="2" class="font-mono" placeholder='{ "keyword": "laptop" }' />
         </el-form-item>
       </el-card>
 
-      <el-card shadow="never" header="Execution" class="mb-4">
+      <el-card shadow="never" header="Cách chạy" class="mb-4">
         <div class="grid grid-cols-1 gap-x-6 md:grid-cols-3">
-          <el-form-item label="Job name">
+          <el-form-item label="Tên job">
             <el-input v-model="form.name" :placeholder="selectedScript?.name ?? 'Ad-hoc job'" />
           </el-form-item>
-          <el-form-item label="Concurrency (parallel Chrome contexts)">
+          <el-form-item label="Chạy song song (số Chrome)">
             <el-input-number v-model="form.concurrency" :min="1" :max="50" :disabled="!!form.profileId" />
           </el-form-item>
-          <el-form-item label="Show Chrome windows">
+          <el-form-item label="Hiện cửa sổ Chrome">
             <el-switch v-model="form.headless" :active-value="false" :inactive-value="true" active-text="headed" inactive-text="headless" />
           </el-form-item>
-          <el-form-item label="Profile (keeps logins; runs tasks one by one)">
-            <el-select v-model="form.profileId" clearable placeholder="None — fresh context per task" class="!w-full">
+          <el-form-item label="Profile (giữ đăng nhập; task chạy lần lượt)">
+            <el-select v-model="form.profileId" clearable placeholder="Không dùng: Chrome mới cho mỗi task" class="!w-full">
               <el-option v-for="p in profiles" :key="p._id" :label="p.name" :value="p._id" :disabled="p.inUse" />
             </el-select>
           </el-form-item>
-          <el-form-item label="Retries per failed task">
+          <el-form-item label="Số lần thử lại khi lỗi">
             <el-input-number v-model="form.maxRetries" :min="0" :max="5" />
           </el-form-item>
-          <el-form-item label="Step timeout (s)">
+          <el-form-item label="Timeout mỗi bước (giây)">
             <el-input-number v-model="form.stepTimeout" :min="1" :max="600" />
           </el-form-item>
         </div>
       </el-card>
 
       <el-button type="primary" size="large" native-type="submit" :loading="submitting">
-        Start {{ taskCount }} task(s)
+        ▶ Chạy {{ taskCount }} task
       </el-button>
     </el-form>
   </div>

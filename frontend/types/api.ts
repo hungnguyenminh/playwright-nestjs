@@ -30,6 +30,7 @@ export interface Job {
   _id: string;
   name: string;
   scriptId?: string;
+  flowId?: string;
   actions?: Action[];
   profileId?: string;
   status: JobStatus;
@@ -128,3 +129,52 @@ export type TaskPatch = Partial<Task> & { _id: string; jobId: string };
 export const FINISHED: TaskStatus[] = ['done', 'failed', 'cancelled'];
 
 export const totalOf = (t: Totals) => Object.values(t).reduce((a, b) => a + b, 0);
+
+/** A saved "Luồng": profile (optional) + script + job settings. */
+export interface Flow {
+  _id: string;
+  name: string;
+  description: string;
+  profileId?: string;
+  scriptId: string;
+  inputsText: string;
+  vars: Record<string, unknown>;
+  concurrency: number;
+  headless: boolean;
+  maxRetries: number;
+  /** Seconds. */
+  stepTimeout: number;
+  runs: number;
+  lastRunAt?: string;
+  lastJobId?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface FlowListItem extends Flow {
+  scriptName: string;
+  profileName: string;
+  lastJob: Pick<Job, '_id' | 'status' | 'totals'> | null;
+}
+
+export type ScopeType = 'flow' | 'script' | 'job';
+
+export interface DatasetSummary {
+  scope: string;
+  scopeType: ScopeType;
+  scopeName: string;
+  dataset: string;
+  count: number;
+  lastSeenAt: string;
+}
+
+export interface DataRecord {
+  _id: string;
+  data: Record<string, unknown>;
+  jobId: string;
+  taskId: string;
+  taskName: string;
+  firstSeenAt: string;
+  lastSeenAt: string;
+  seenCount: number;
+}

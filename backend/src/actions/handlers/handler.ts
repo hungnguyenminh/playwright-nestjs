@@ -65,5 +65,16 @@ export const randomBetween = (min: number, max: number) =>
 /** Playwright errors carry a long call log; keep the first useful lines. */
 export function errorMessage(err: unknown): string {
   const msg = err instanceof Error ? err.message : String(err);
-  return msg.split('\n').slice(0, 3).join(' | ').slice(0, 500);
+  return msg
+    .replace(ANSI_ESCAPES, '')
+    .split('\n')
+    .map((l) => l.trim())
+    .filter(Boolean)
+    .slice(0, 3)
+    .join(' | ')
+    .slice(0, 500);
 }
+
+/** Terminal colour codes Playwright puts in its call logs. */
+// oxlint-disable-next-line no-control-regex -- matching ESC is the point
+const ANSI_ESCAPES = /\u001b\[[0-9;]*m/g;

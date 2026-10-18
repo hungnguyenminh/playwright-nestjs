@@ -28,10 +28,12 @@ npm-debug.log*
 /backend/dist
 /backend/storage
 /backend/storage-test
+/backend/profiles-test
 /backend/profiles
 
 # Nuxt
 /frontend/.nuxt
+/frontend/.nuxt-*
 /frontend/.output
 /frontend/.data
 /frontend/dist

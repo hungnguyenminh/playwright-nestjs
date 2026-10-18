@@ -44,8 +44,8 @@ export class JobsController {
   }
 
   @Post(':id/retry')
-  retry(@Param('id', ParseObjectIdPipe) id: string) {
-    return this.jobs.retry(id);
+  retry(@Param('id', ParseObjectIdPipe) id: string, @Body() body: { useLatestScript?: boolean } = {}) {
+    return this.jobs.retry(id, body?.useLatestScript === true);
   }
 
   @Delete(':id')

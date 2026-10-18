@@ -136,3 +136,11 @@ describe('ActionRunner (real Chrome)', () => {
     expect(error).toBeInstanceOf(StopSignal);
   });
 });
+
+describe('errorMessage', () => {
+  it('strips terminal colour codes from Playwright call logs', async () => {
+    const { errorMessage } = await import('./handlers/handler.js');
+    const msg = errorMessage(new Error('locator.click: Timeout 500ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator(\'#missing\')\u001b[22m\n'));
+    expect(msg).toBe("locator.click: Timeout 500ms exceeded. | Call log: | - waiting for locator('#missing')");
+  });
+});

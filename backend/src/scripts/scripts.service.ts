@@ -16,6 +16,11 @@ export class ScriptsService {
       .lean();
   }
 
+  /** Including actions (for the AI assistant's context). */
+  listFull() {
+    return this.scripts.find().sort({ updatedAt: -1 }).lean();
+  }
+
   async get(id: string) {
     const script = await this.scripts.findById(id).lean();
     if (!script) throw new NotFoundException('Script not found');
@@ -30,7 +35,7 @@ export class ScriptsService {
   async update(id: string, dto: ScriptDto) {
     assertValidActions(dto.actions);
     const script = await this.scripts
-      .findByIdAndUpdate(id, dto, { new: true, runValidators: true })
+      .findByIdAndUpdate(id, dto, { returnDocument: 'after', runValidators: true })
       .lean();
     if (!script) throw new NotFoundException('Script not found');
     return script;

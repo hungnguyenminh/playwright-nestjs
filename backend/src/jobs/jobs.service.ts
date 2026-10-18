@@ -68,6 +68,7 @@ export class JobsService {
     const job = await this.jobs.create({
       name: dto.name || script?.name || 'Ad-hoc job',
       scriptId: script?._id,
+      flowId: dto.flowId ? oid(dto.flowId) : undefined,
       actions,
       emulation: mergeEmulation(script?.emulation, profileEmulation, dto.emulation),
       profileId: dto.profileId ? oid(dto.profileId) : undefined,
@@ -90,8 +91,8 @@ export class JobsService {
     return job.toObject();
   }
 
-  list(q: PageQuery) {
-    return paginate(this.jobs, {}, q, { createdAt: -1 }, { actions: 0 });
+  list(q: PageQuery, flowId?: string) {
+    return paginate(this.jobs, flowId ? { flowId: oid(flowId) } : {}, q, { createdAt: -1 }, { actions: 0 });
   }
 
   async get(id: string) {
@@ -109,10 +110,20 @@ export class JobsService {
     if (!this.runner.cancelJob(id)) throw new ConflictException('Job is not running');
   }
 
-  /** Re-queues failed and cancelled tasks and runs them again. */
-  async retry(id: string) {
-    await this.get(id);
+  /**
+   * Re-queues failed and cancelled tasks and runs them again. With
+   * `useLatestScript`, the job first takes the script's current actions
+   * (e.g. after fixing it) instead of the snapshot taken at creation.
+   */
+  async retry(id: string, useLatestScript = false) {
+    const job = await this.get(id);
     if (this.runner.isRunning(id)) throw new ConflictException('Job is still running');
+    if (useLatestScript) {
+      if (!job.scriptId) throw new BadRequestException('Job này chạy inline actions, không gắn với script nào');
+      const script = await this.scripts.get(String(job.scriptId));
+      assertValidActions(script.actions);
+      await this.jobs.updateOne({ _id: job._id }, { actions: script.actions });
+    }
     const res = await this.tasks.updateMany(
       { jobId: oid(id), status: { $in: ['failed', 'cancelled'] } },
       { status: 'queued', error: null, finishedAt: null },

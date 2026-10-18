@@ -1,6 +1,6 @@
 # Các khái niệm
 
-Tài liệu này giải thích các khái niệm chính của tool: **Script**, **Profile**, **Job**, **Task**, cùng cách chúng phối hợp khi chạy. Phần cài đặt và chạy xem ở [README](../README.md).
+Tài liệu này giải thích các khái niệm chính của tool: **Script**, **Profile**, **Job**, **Task**, cùng cách chúng phối hợp khi chạy. **Luồng** gom cả bốn thứ đó thành một việc lưu sẵn để chạy lại (xem mục 8), và **Dữ liệu** là nơi lưu kết quả. Phần cài đặt và chạy xem ở [README](../README.md).
 
 ```
  Script ──────────┐   "làm gì trên trang"
@@ -222,3 +222,46 @@ Khi gặp captcha, OTP hay bước cần người làm:
   "images": ["https://scontent…"]
 }
 ```
+
+---
+
+## 7. Trợ lý AI ("Tạo bằng AI")
+
+Các trang **Script**, **Profiles** và **New job** có khung **Tạo bằng AI**: bạn mô tả yêu cầu bằng chữ, AI viết hướng dẫn ngay trong trang và đề xuất giá trị cho form.
+
+| Bước | Việc |
+| --- | --- |
+| Cấu hình (một lần) | **Cài đặt → AI**: Base URL (để trống = `api.anthropic.com`, hoặc gateway tương thích Anthropic Messages API), loại token (API key / Bearer), token, model, effort. Token được mã hoá AES-256-GCM bằng `SETTINGS_SECRET` trong `backend/.env` và không bao giờ được trả lại đầy đủ |
+| Yêu cầu | Gõ mô tả. Ở trang Script / New job có thể tick **Đọc trang trước khi viết**: backend mở trang (có thể kèm profile đã đăng nhập) và gửi cho AI cấu trúc rút gọn cùng ảnh chụp, để AI chọn selector có thật trên trang |
+| Đề xuất | AI trả hướng dẫn (hiện dần) và một đề xuất form. Backend kiểm tra đề xuất bằng đúng luật dùng khi lưu (schema action, biến, id script/profile); nếu sai thì gửi lỗi lại cho AI tự sửa, tối đa 3 lượt |
+| Accept | **Chỉ điền vào form**. Bạn vẫn tự Save / Start |
+| Chỉnh tiếp | Gõ yêu cầu chỉnh; AI sửa trên đề xuất trước |
+| Sửa task lỗi | Trang task lỗi → **✨ Nhờ AI sửa**: AI nhận bước lỗi, thông báo lỗi, log, script và ảnh chụp lúc lỗi → đề xuất bản sửa → **Lưu & chạy lại task lỗi** (job chạy lại các task lỗi bằng script mới nhất) |
+
+---
+
+## 8. Luồng và Dữ liệu
+
+**Luồng** = một việc lưu sẵn: *profile (nếu cần) + script + inputs + cách chạy*. Tạo bằng wizard **Luồng → Tạo luồng mới** (mục tiêu → profile → script → job & task → xác nhận). Mỗi lần bấm **▶ Chạy** sinh ra một job (tên dạng "Tên luồng · lần N") và các task của nó; trang chi tiết luồng liệt kê mọi lần chạy.
+
+```
+Luồng "Theo dõi giá"
+ ├─ Profile: shop-test (tuỳ chọn)
+ ├─ Script: Sản phẩm
+ ├─ Inputs: 2 dòng → 2 task mỗi lần chạy
+ └─ Các lần chạy: lần 1 (job), lần 2 (job), …  →  Dữ liệu: products (3 dòng), kết quả (2 dòng)
+```
+
+**Dữ liệu** (collection `records`) lưu kết quả của mọi task chạy xong:
+
+| Kết quả của task | Thành |
+| --- | --- |
+| Biến là mảng object (ví dụ `posts`) | Mỗi phần tử một dòng trong bộ `posts` |
+| Biến là mảng giá trị đơn | Mỗi giá trị một dòng `{ value }` |
+| Biến là object | Một dòng |
+| Các biến giá trị đơn (title, price…) | Một dòng mỗi task trong bộ `kết quả` |
+
+- Dữ liệu được nhóm theo **luồng** (hoặc theo **script** khi chạy ngoài luồng, ví dụ khi chạy thử).
+- Mục có cùng `url` / `link` / `href` / `id` được **gộp** qua các lần chạy; mỗi dòng có thời điểm gặp lần đầu, lần cuối và số lần gặp.
+- Dữ liệu **vẫn còn khi xoá job**; muốn xoá thì dùng nút *Xoá bộ dữ liệu* hoặc xoá từng dòng trên trang Dữ liệu.
+- Tải về: **CSV** (mở bằng Excel, đúng tiếng Việt) hoặc **JSON**.

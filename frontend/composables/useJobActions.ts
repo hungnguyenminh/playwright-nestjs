@@ -7,9 +7,10 @@ export function useJobActions(onChange?: () => void) {
     await tryApi(() => api(`/jobs/${job._id}/cancel`, { method: 'POST' }), 'Cancelling…');
   }
 
-  async function retry(job: Pick<Job, '_id'>) {
+  /** `useLatestScript`: re-run with the script's current actions (after fixing it). */
+  async function retry(job: Pick<Job, '_id'>, useLatestScript = false) {
     const res = await tryApi(() =>
-      api<{ requeued: number }>(`/jobs/${job._id}/retry`, { method: 'POST' }),
+      api<{ requeued: number }>(`/jobs/${job._id}/retry`, { method: 'POST', body: { useLatestScript } }),
     );
     if (res) ElMessage.success(`Re-queued ${res.requeued} task(s)`);
     onChange?.();

@@ -1,14 +1,14 @@
 import type { Job, JobPatch, Paged } from '~/types/api';
 
 /** A page of jobs kept in sync with live `job:update` events. */
-export function useJobsList(query: () => Record<string, unknown>) {
+export function useJobsList(query: () => Record<string, unknown>, path = '/jobs') {
   const { api } = useApi();
   const data = ref<Paged<Job>>({ items: [], total: 0, page: 1, limit: 20 });
   const loading = ref(false);
 
   async function load() {
     loading.value = true;
-    const res = await tryApi(() => api<Paged<Job>>('/jobs', { query: query() }));
+    const res = await tryApi(() => api<Paged<Job>>(path, { query: query() }));
     if (res) data.value = res;
     loading.value = false;
   }

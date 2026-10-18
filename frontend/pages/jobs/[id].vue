@@ -62,43 +62,49 @@ function exportResults() {
 </script>
 
 <template>
-  <div v-if="job" class="space-y-4">
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex items-center gap-3">
-        <el-button text @click="navigateTo('/jobs')">←</el-button>
-        <h1 class="m-0 text-xl font-semibold">{{ job.name }}</h1>
-        <StatusTag :status="job.status" />
-      </div>
-      <div class="flex gap-2">
-        <el-button @click="exportResults">Export results (page)</el-button>
-        <el-button v-if="running" type="warning" @click="cancel(job)">Cancel job</el-button>
-        <el-button v-else-if="job.totals.failed || job.totals.cancelled" type="primary" @click="retry(job)">
-          Retry failed
-        </el-button>
-        <el-button v-if="!running" type="danger" plain @click="onDelete">Delete</el-button>
-      </div>
-    </div>
+  <div v-if="job" class="page">
+    <PageHeader :title="job.name" back="/jobs">
+      <template #badge><StatusTag :status="job.status" /></template>
+      <template #subtitle>
+        <span v-if="job.flowId">Thuộc luồng · <NuxtLink :to="`/flows/${job.flowId}`">mở luồng</NuxtLink> · </span>
+        Bắt đầu {{ job.startedAt ? fmtDate(job.startedAt) : '—' }}<span v-if="duration"> · {{ duration }}</span>
+      </template>
+      <template #actions>
+        <el-button @click="exportResults">Tải kết quả (trang này)</el-button>
+        <el-button v-if="running" type="warning" @click="cancel(job)">Huỷ job</el-button>
+        <template v-else-if="job.totals.failed || job.totals.cancelled">
+          <el-dropdown v-if="job.scriptId" split-button type="primary" @click="retry(job)" @command="retry(job, true)">
+            Chạy lại task lỗi
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item command="latest">Retry bằng script mới nhất (sau khi đã sửa script)</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+          <el-button v-else type="primary" @click="retry(job)">Chạy lại task lỗi</el-button>
+        </template>
+        <el-button v-if="!running" type="danger" plain @click="onDelete">Xoá</el-button>
+      </template>
+    </PageHeader>
 
     <el-card shadow="never">
       <JobProgress :totals="job.totals" show-counts />
-      <div class="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-500">
-        <span>concurrency {{ job.concurrency }}</span>
-        <span>{{ job.headless ? 'headless' : 'headed' }}</span>
-        <span>retries {{ job.maxRetries }}</span>
-        <span>step timeout {{ job.stepTimeout / 1000 }}s</span>
-        <span v-if="job.startedAt">started {{ new Date(job.startedAt).toLocaleString() }}</span>
-        <span v-if="duration">duration {{ duration }}</span>
+      <div class="mt-4 grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 sm:grid-cols-4">
+        <div><div class="eyebrow">Song song</div><div class="mt-0.5 text-sm font-medium">{{ job.concurrency }} Chrome</div></div>
+        <div><div class="eyebrow">Chế độ</div><div class="mt-0.5 text-sm font-medium">{{ job.headless ? 'Ẩn (headless)' : 'Hiện cửa sổ (headed)' }}</div></div>
+        <div><div class="eyebrow">Thử lại khi lỗi</div><div class="mt-0.5 text-sm font-medium">{{ job.maxRetries }} lần</div></div>
+        <div><div class="eyebrow">Timeout mỗi bước</div><div class="mt-0.5 text-sm font-medium">{{ job.stepTimeout / 1000 }} giây</div></div>
       </div>
     </el-card>
 
     <div class="flex items-center justify-between">
       <el-radio-group v-model="filter.status" size="small" @change="filter.page = 1">
-        <el-radio-button value="">All</el-radio-button>
-        <el-radio-button value="running,paused">Running</el-radio-button>
-        <el-radio-button value="queued">Queued</el-radio-button>
-        <el-radio-button value="done">Done</el-radio-button>
-        <el-radio-button value="failed">Failed</el-radio-button>
-        <el-radio-button value="cancelled">Cancelled</el-radio-button>
+        <el-radio-button value="">Tất cả</el-radio-button>
+        <el-radio-button value="running,paused">Đang chạy</el-radio-button>
+        <el-radio-button value="queued">Đang chờ</el-radio-button>
+        <el-radio-button value="done">Hoàn tất</el-radio-button>
+        <el-radio-button value="failed">Lỗi</el-radio-button>
+        <el-radio-button value="cancelled">Đã huỷ</el-radio-button>
       </el-radio-group>
       <el-pagination
         v-model:current-page="filter.page"
@@ -112,6 +118,6 @@ function exportResults() {
     <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
       <TaskCard v-for="t in tasks" :key="t._id" :task="t" />
     </div>
-    <el-empty v-if="!tasks.length" description="No tasks" />
+    <el-empty v-if="!tasks.length" description="Không có task nào" />
   </div>
 </template>

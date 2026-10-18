@@ -4,10 +4,10 @@ import request from 'supertest';
 import { AppModule } from './../src/app.module.js';
 
 /**
- * Needs MongoDB (MONGODB_URI, a separate test database by default) and Google
- * Chrome installed. Pages are served as data: URLs, no network required.
+ * Needs MongoDB and Google Chrome. vitest.config.e2e.ts points MONGODB_URI at a
+ * separate test database (browser-automation-test). Pages are served as
+ * data: URLs, no network required.
  */
-process.env.MONGODB_URI ??= 'mongodb://localhost:27017/browser-automation-test';
 
 const page = (body: string) =>
   'data:text/html,' + encodeURIComponent(`<html><body>${body}</body></html>`);

@@ -39,7 +39,7 @@ export class ProfilesService {
 
   async update(id: string, dto: ProfileDto) {
     const profile = await this.profiles
-      .findByIdAndUpdate(id, dto, { new: true })
+      .findByIdAndUpdate(id, dto, { returnDocument: 'after' })
       .lean();
     if (!profile) throw new NotFoundException('Profile not found');
     return profile;
