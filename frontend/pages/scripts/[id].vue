@@ -33,7 +33,22 @@ const saving = ref(false);
 
 onMounted(async () => {
   schema.value = await tryApi(() => api<object>('/actions/schema'));
-  if (isNew.value) return;
+  if (isNew.value) {
+    // "Dùng mẫu này" on the guide page hands over a template.
+    const raw = sessionStorage.getItem('script-template');
+    sessionStorage.removeItem('script-template');
+    if (raw) {
+      const t = JSON.parse(raw) as Partial<Script>;
+      Object.assign(form, {
+        name: t.name ?? '',
+        description: t.description ?? '',
+        actionsText: JSON.stringify(t.actions ?? [], null, 2),
+        varsText: JSON.stringify(t.defaultVars ?? {}, null, 2),
+        emulationText: JSON.stringify(t.emulation ?? {}, null, 2),
+      });
+    }
+    return;
+  }
   const s = await tryApi(() => api<Script>(`/scripts/${route.params.id}`));
   if (!s) return;
   Object.assign(form, {

@@ -31,6 +31,7 @@ Biến môi trường của backend (`backend/.env`): `PORT`, `MONGODB_URI`, `FR
 ## Khái niệm
 
 > Giải thích chi tiết (script, biến, profile, job, task, trạng thái, nơi lưu dữ liệu, kèm ví dụ Facebook): xem [docs/khai-niem.md](docs/khai-niem.md).
+> Tham chiếu đầy đủ mọi action, tham số, điều kiện và hướng dẫn viết script: xem [docs/script.md](docs/script.md).
 
 - **Script**: danh sách action (DSL JSON), có `defaultVars` và `emulation`. Chuỗi trong action dùng biến dạng `{{name}}` / `{{obj.path}}`.
 - **Job**: chạy một script với danh sách `inputs`, mỗi input là một **task** (một context Chrome riêng). Có `concurrency`, `headless`, `maxRetries`, `stepTimeout`, và `profileId` (tuỳ chọn).

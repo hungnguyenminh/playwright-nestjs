@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Connection, DataBoard, Document, List, Plus, User } from '@element-plus/icons-vue';
+import { Connection, DataBoard, Document, List, Plus, QuestionFilled, User } from '@element-plus/icons-vue';
 import { useLiveStore } from '~/stores/live';
 
 const route = useRoute();
@@ -12,6 +12,7 @@ const menu = [
   { to: '/jobs/new', label: 'New job', icon: Plus },
   { to: '/scripts', label: 'Scripts', icon: Document },
   { to: '/profiles', label: 'Profiles', icon: User },
+  { to: '/guide', label: 'Hướng dẫn', icon: QuestionFilled },
 ];
 
 const active = computed(() => {
