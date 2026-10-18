@@ -21,8 +21,11 @@ useLiveEvent<Partial<Job> & { _id: string }>('job:update', (patch) => {
 });
 
 async function runNow(f: FlowListItem) {
-  const job = await tryApi(() => api<Job>(`/flows/${f._id}/run`, { method: 'POST', body: {} }), 'Đã bắt đầu chạy');
-  if (job) navigateTo(`/jobs/${job._id}`);
+  const res = await tryApi(() => api<Job | { runId: string; jobs: Job[] }>(`/flows/${f._id}/run`, { method: 'POST', body: {} }), 'Đã bắt đầu chạy');
+  if (!res) return;
+  // Source flows start one job per source: show them on the flow page.
+  if ('jobs' in res) navigateTo(res.jobs.length === 1 ? `/jobs/${res.jobs[0]._id}` : `/flows/${f._id}`);
+  else navigateTo(`/jobs/${res._id}`);
 }
 
 async function remove(f: FlowListItem) {
@@ -51,7 +54,7 @@ async function remove(f: FlowListItem) {
         <div class="font-medium">{{ f.name }}</div>
         <div v-if="f.description" class="mt-0.5 line-clamp-2 text-xs text-slate-500">{{ f.description }}</div>
         <div class="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
-          <span>Script: {{ f.scriptName }}</span>
+          <span>{{ f.kind === 'sources' ? 'Nguồn' : 'Script' }}: {{ f.scriptName }}</span>
           <span v-if="f.profileName">Profile: {{ f.profileName }}</span>
           <span>{{ f.runs }} lần chạy</span>
         </div>
@@ -78,7 +81,7 @@ async function remove(f: FlowListItem) {
         <el-table-column label="Profile" width="150">
           <template #default="{ row }">{{ row.profileName || '—' }}</template>
         </el-table-column>
-        <el-table-column label="Script" prop="scriptName" min-width="180" show-overflow-tooltip />
+        <el-table-column label="Script / Nguồn" prop="scriptName" min-width="180" show-overflow-tooltip />
         <el-table-column label="Lần chạy" prop="runs" width="90" align="center" />
         <el-table-column label="Lần chạy gần nhất" min-width="220">
           <template #default="{ row }">

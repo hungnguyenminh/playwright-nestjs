@@ -5,6 +5,7 @@ import { errorMessage, Handler, HandlerMap } from './handlers/handler.js';
 import { interactionHandlers } from './handlers/interaction.handlers.js';
 import { navigationHandlers } from './handlers/navigation.handlers.js';
 import { networkHandlers } from './handlers/network.handlers.js';
+import { sourceHandlers } from './handlers/source.handlers.js';
 import { tabHandlers } from './handlers/tab.handlers.js';
 import { waitHandlers } from './handlers/wait.handlers.js';
 import { interpolate } from './interpolate.js';
@@ -20,6 +21,7 @@ export const HANDLERS: HandlerMap = {
   ...interactionHandlers,
   ...waitHandlers,
   ...dataHandlers,
+  ...sourceHandlers,
   ...networkHandlers,
   ...tabHandlers,
   ...controlHandlers,

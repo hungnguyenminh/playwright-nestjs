@@ -5,11 +5,11 @@ import type { Job, Paged, Task, TaskPatch } from '~/types/api';
  * Log in once with a profile: opens a headed Chrome on the page, pauses, and
  * shows the live view here; "Resume" closes Chrome and keeps the session.
  */
-const props = defineProps<{ profileId: string; profileName: string }>();
+const props = defineProps<{ profileId: string; profileName: string; loginUrl?: string }>();
 const emit = defineEmits<{ done: [] }>();
 const { api } = useApi();
 
-const url = ref('https://');
+const url = ref(props.loginUrl || 'https://');
 const task = ref<Task>();
 const starting = ref(false);
 
@@ -24,6 +24,9 @@ useLiveEvent<TaskPatch>('task:update', (patch) => {
 async function open() {
   if (!/^https?:\/\/.+/.test(url.value)) return ElMessage.warning('Nhập trang đăng nhập, ví dụ https://www.facebook.com');
   starting.value = true;
+  if (url.value !== props.loginUrl) {
+    await api(`/profiles/${props.profileId}`, { method: 'PUT', body: { name: props.profileName, loginUrl: url.value } }).catch(() => undefined);
+  }
   const job = await tryApi(() =>
     api<Job>('/jobs', {
       method: 'POST',

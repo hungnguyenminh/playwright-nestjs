@@ -15,6 +15,7 @@ const dialog = reactive({
   proxyUser: '',
   proxyPass: '',
   emulationText: '{}',
+  mode: 'folder' as Profile['mode'],
   /** Open with the AI assistant expanded. */
   ai: false,
   /** Remounts the assistant (fresh conversation) each time the dialog opens. */
@@ -38,6 +39,7 @@ function edit(p?: Profile, ai = false) {
     proxyUser: p?.proxy?.username ?? '',
     proxyPass: p?.proxy?.password ?? '',
     emulationText: JSON.stringify(p?.emulation ?? {}, null, 2),
+    mode: p?.mode ?? 'folder',
     ai,
     session: dialog.session + 1,
   });
@@ -81,6 +83,7 @@ async function save() {
   const body = {
     name: dialog.name,
     notes: dialog.notes,
+    mode: dialog.mode,
     emulation,
     proxy: dialog.proxyServer
       ? { server: dialog.proxyServer, username: dialog.proxyUser || undefined, password: dialog.proxyPass || undefined }
@@ -91,7 +94,7 @@ async function save() {
       dialog.id
         ? api(`/profiles/${dialog.id}`, { method: 'PUT', body })
         : api('/profiles', { method: 'POST', body }),
-    'Saved',
+    'Đã lưu',
   );
   if (res) {
     dialog.open = false;
@@ -101,22 +104,51 @@ async function save() {
 
 async function remove(p: Profile) {
   const ok = await ElMessageBox.confirm(
-    `Delete profile "${p.name}" and its Chrome data (cookies, logins)?`,
-    'Delete profile',
-    { type: 'warning', confirmButtonText: 'Delete' },
+    `Xoá profile "${p.name}" cùng toàn bộ dữ liệu Chrome và phiên đăng nhập của nó?`,
+    'Xoá profile',
+    { type: 'warning', confirmButtonText: 'Xoá' },
   ).catch(() => false);
   if (!ok) return;
-  await tryApi(() => api(`/profiles/${p._id}`, { method: 'DELETE' }), 'Deleted');
+  await tryApi(() => api(`/profiles/${p._id}`, { method: 'DELETE' }), 'Đã xoá');
   load();
+}
+
+/** Folder → database: copies cookies + localStorage out of the Chrome folder. */
+async function importSession(p: Profile) {
+  const ok = await ElMessageBox.confirm(
+    `Chép cookie và localStorage từ thư mục Chrome của "${p.name}" vào database (mã hoá), rồi chuyển profile sang chế độ "Phiên trong DB" để chạy song song? Thư mục Chrome vẫn được giữ.`,
+    'Chuyển phiên vào DB',
+    { confirmButtonText: 'Chuyển', type: 'info' },
+  ).catch(() => false);
+  if (!ok) return;
+  if (await tryApi(() => api(`/profiles/${p._id}/import-session`, { method: 'POST' }), 'Đã chuyển phiên vào database')) load();
+}
+
+async function clearSession(p: Profile) {
+  const ok = await ElMessageBox.confirm(`Xoá phiên đăng nhập đã lưu của "${p.name}"? Lần chạy sau sẽ như chưa đăng nhập.`, 'Xoá phiên', {
+    type: 'warning',
+    confirmButtonText: 'Xoá phiên',
+  }).catch(() => false);
+  if (!ok) return;
+  if (await tryApi(() => api(`/profiles/${p._id}/session`, { method: 'DELETE' }), 'Đã xoá phiên')) load();
 }
 
 /** Opens a headed Chrome with this profile and pauses so you can log in by hand. */
 async function openForLogin(p: Profile) {
-  const res = await ElMessageBox.prompt('Page to open', `Open "${p.name}"`, {
-    inputValue: 'https://accounts.google.com',
-    confirmButtonText: 'Open Chrome',
+  const res = await ElMessageBox.prompt('Trang cần đăng nhập (lần sau sẽ tự điền lại)', `Mở Chrome với profile "${p.name}"`, {
+    inputValue: p.loginUrl || 'https://',
+    inputPattern: /^https?:\/\/\S+\.\S+/,
+    inputErrorMessage: 'Nhập địa chỉ đầy đủ, ví dụ https://www.facebook.com',
+    confirmButtonText: 'Mở Chrome',
+    cancelButtonText: 'Huỷ',
   }).catch(() => undefined);
   if (!res) return;
+  const url = res.value.trim();
+  // Remember it for next time (only name is required by the API).
+  if (url !== p.loginUrl) {
+    await api(`/profiles/${p._id}`, { method: 'PUT', body: { name: p.name, loginUrl: url } }).catch(() => undefined);
+    p.loginUrl = url;
+  }
   const job = await tryApi(() =>
     api<Job>('/jobs', {
       method: 'POST',
@@ -126,8 +158,8 @@ async function openForLogin(p: Profile) {
         headless: false,
         stepTimeout: 60_000,
         actions: [
-          { type: 'goto', url: res.value },
-          { type: 'pause', message: 'Log in in the Chrome window, then press Resume to save and close.' },
+          { type: 'goto', url },
+          { type: 'pause', message: 'Đăng nhập trong cửa sổ Chrome, xong thì bấm Resume để lưu.' },
         ],
       },
     }),
@@ -142,7 +174,7 @@ async function openForLogin(p: Profile) {
   <div class="page">
     <PageHeader
       title="Chrome profiles"
-      subtitle="Mỗi profile là một thư mục dữ liệu Chrome riêng: giữ cookie và đăng nhập giữa các lần chạy, mỗi lúc một task."
+      subtitle="Profile giữ phiên đăng nhập giữa các lần chạy: trong thư mục Chrome riêng (đầy đủ, 1 task mỗi lúc) hoặc trong database (chạy song song)."
     >
       <template #actions>
         <el-button color="#7c3aed" plain @click="edit(undefined, true)">✨ Tạo bằng AI</el-button>
@@ -156,6 +188,20 @@ async function openForLogin(p: Profile) {
           <template #default="{ row }"><span class="font-medium">{{ row.name }}</span></template>
         </el-table-column>
         <el-table-column label="Ghi chú" prop="notes" min-width="200" show-overflow-tooltip />
+        <el-table-column label="Lưu phiên" min-width="190">
+          <template #default="{ row }">
+            <div v-if="row.mode === 'session'">
+              <el-tag size="small" type="primary" disable-transitions>Trong DB · chạy song song</el-tag>
+              <div class="mt-0.5 text-xs text-slate-500">
+                {{ row.sessionCookies ? `${row.sessionCookies} cookie · ${fmtDate(row.sessionUpdatedAt)}` : 'chưa có phiên: mở để đăng nhập' }}
+              </div>
+            </div>
+            <div v-else>
+              <el-tag size="small" type="info" disable-transitions>Thư mục Chrome</el-tag>
+              <div class="mt-0.5 text-xs text-slate-500">1 task mỗi lúc</div>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="Proxy" min-width="160">
           <template #default="{ row }">{{ row.proxy?.server ?? '—' }}</template>
         </el-table-column>
@@ -165,9 +211,18 @@ async function openForLogin(p: Profile) {
         <el-table-column label="" width="90">
           <template #default="{ row }"><el-tag v-if="row.inUse" size="small" type="warning">đang dùng</el-tag></template>
         </el-table-column>
-        <el-table-column width="290" align="right" :fixed="isPhone ? false : 'right'">
+        <el-table-column width="330" align="right" :fixed="isPhone ? false : 'right'">
           <template #default="{ row }">
             <el-button size="small" type="primary" plain :disabled="row.inUse" @click="openForLogin(row as Profile)">Mở để đăng nhập</el-button>
+            <el-dropdown trigger="click" class="ml-2" @command="(c: string) => (c === 'import' ? importSession(row as Profile) : clearSession(row as Profile))">
+              <el-button size="small">Phiên ▾</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="import" :disabled="row.inUse">Chuyển phiên từ thư mục vào DB</el-dropdown-item>
+                  <el-dropdown-item command="clear" :disabled="row.mode !== 'session' || !row.sessionCookies">Xoá phiên trong DB</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
             <el-button size="small" @click="edit(row as Profile)">Sửa</el-button>
             <el-button size="small" type="danger" plain :disabled="row.inUse" @click="remove(row as Profile)">Xoá</el-button>
           </template>
@@ -186,14 +241,26 @@ async function openForLogin(p: Profile) {
         @accept="applyProfileAi"
       />
       <el-form label-position="top">
-        <el-form-item label="Name"><el-input v-model="dialog.name" /></el-form-item>
-        <el-form-item label="Notes"><el-input v-model="dialog.notes" /></el-form-item>
-        <el-form-item label="Proxy server (optional)">
+        <el-form-item label="Tên"><el-input v-model="dialog.name" /></el-form-item>
+        <el-form-item label="Ghi chú"><el-input v-model="dialog.notes" /></el-form-item>
+        <el-form-item label="Lưu phiên đăng nhập ở đâu">
+          <el-radio-group v-model="dialog.mode" class="!flex !flex-col !items-start gap-1">
+            <el-radio value="folder">
+              <b>Thư mục Chrome</b>
+              <span class="ml-1 text-xs text-slate-500">giữ đủ mọi thứ (cookie, IndexedDB, cache…), 1 task mỗi lúc</span>
+            </el-radio>
+            <el-radio value="session">
+              <b>Trong database</b>
+              <span class="ml-1 text-xs text-slate-500">cookie + localStorage mã hoá, nhiều task chạy song song</span>
+            </el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="Proxy server (không bắt buộc)">
           <el-input v-model="dialog.proxyServer" placeholder="http://host:port or socks5://host:port" />
         </el-form-item>
         <div v-if="dialog.proxyServer" class="grid grid-cols-2 gap-3">
-          <el-form-item label="Proxy user"><el-input v-model="dialog.proxyUser" /></el-form-item>
-          <el-form-item label="Proxy password"><el-input v-model="dialog.proxyPass" type="password" show-password /></el-form-item>
+          <el-form-item label="Tài khoản proxy"><el-input v-model="dialog.proxyUser" /></el-form-item>
+          <el-form-item label="Mật khẩu proxy"><el-input v-model="dialog.proxyPass" type="password" show-password /></el-form-item>
         </div>
         <el-form-item label="Emulation (JSON)">
           <el-input
@@ -206,8 +273,8 @@ async function openForLogin(p: Profile) {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="dialog.open = false">Cancel</el-button>
-        <el-button type="primary" @click="save">Save</el-button>
+        <el-button @click="dialog.open = false">Huỷ</el-button>
+        <el-button type="primary" @click="save">Lưu</el-button>
       </template>
     </el-dialog>
   </div>

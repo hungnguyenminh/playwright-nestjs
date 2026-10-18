@@ -25,6 +25,20 @@ const point: Schema = {
   required: ['x', 'y'],
 };
 
+const extractFields: Schema = {
+  type: 'object',
+  additionalProperties: {
+    anyOf: [
+      str,
+      {
+        type: 'object',
+        properties: { selector: str, get: str, multiple: bool },
+        additionalProperties: false,
+      },
+    ],
+  },
+};
+
 interface Spec {
   description: string;
   props?: Record<string, Schema>;
@@ -96,19 +110,7 @@ export const ACTION_SPECS: Record<string, Spec> = {
     description: 'Extract data into a variable (default "data")',
     props: {
       selector: str,
-      fields: {
-        type: 'object',
-        additionalProperties: {
-          anyOf: [
-            str,
-            {
-              type: 'object',
-              properties: { selector: str, get: str, multiple: bool },
-              additionalProperties: false,
-            },
-          ],
-        },
-      },
+      fields: extractFields,
       get: str,
       multiple: bool,
       as: varName,
@@ -128,6 +130,44 @@ export const ACTION_SPECS: Record<string, Spec> = {
   },
   set: { description: 'Set a variable', props: { var: varName, value: any }, required: ['var', 'value'] },
   log: { description: 'Write a message to the task log', props: { message: str }, required: ['message'] },
+
+  dismissOverlays: { description: 'Close or hide popups / cookie walls covering the page' },
+  searchSite: {
+    description: 'Find the site search box (or selector), type query and submit. Empty query does nothing',
+    props: { query: str, selector: str, as: varName },
+    required: ['query'],
+  },
+  collect: {
+    description: 'Extract items like extract multiple, scrolling / pressing "load more" until limit (default 50) distinct items',
+    props: {
+      selector: str,
+      fields: extractFields,
+      limit: int,
+      maxScrolls: int,
+      loadMore: { anyOf: [bool, str] },
+      detail: bool,
+      extra: { type: 'object' },
+      auto: bool,
+      hover: str,
+      expand: bool,
+      required: strList,
+      append: bool,
+      as: varName,
+    },
+    required: ['selector'],
+  },
+  extractAuto: {
+    description: 'Detect the main list (products, posts, results) or the article and read title/url/image/price/text without selectors',
+    props: {
+      mode: { enum: ['auto', 'list', 'article'] },
+      limit: int,
+      maxScrolls: int,
+      detail: bool,
+      extra: { type: 'object' },
+      append: bool,
+      as: varName,
+    },
+  },
 
   blockResources: {
     description: 'Abort requests by resource type (image, font, media, stylesheet...)',

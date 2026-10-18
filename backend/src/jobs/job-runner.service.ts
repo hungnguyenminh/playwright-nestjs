@@ -18,6 +18,7 @@ import {
 } from '../actions/run-context.js';
 import { ArtifactsService } from '../artifacts/artifacts.service.js';
 import { BrowserPoolService, ContextLease } from '../browser/browser-pool.service.js';
+import { ProfileLease, ProfilesService } from '../profiles/profiles.service.js';
 import { Semaphore } from '../common/semaphore.js';
 import {
   Events,
@@ -84,6 +85,7 @@ export class JobRunnerService implements OnApplicationBootstrap, OnModuleDestroy
     @InjectModel(TaskLog.name) private readonly logs: Model<TaskLog>,
     private readonly pool: BrowserPoolService,
     private readonly artifacts: ArtifactsService,
+    private readonly profiles: ProfilesService,
     private readonly events: EventEmitter2,
   ) {}
 
@@ -204,13 +206,18 @@ export class JobRunnerService implements OnApplicationBootstrap, OnModuleDestroy
     const { signal } = entry.abort;
     let releaseSlot: (() => void) | undefined;
     let lease: ContextLease | undefined;
+    let profile: ProfileLease | undefined;
     const closeOnAbort = () => void lease?.release();
     try {
       releaseSlot = await run.slots.acquire(signal);
+      // Folder profiles open their Chrome user-data dir; session profiles a
+      // fresh context preloaded with the saved cookies / localStorage.
+      profile = job.profileId ? await this.profiles.leaseFor(String(job.profileId)) : undefined;
       lease = await this.pool.lease({
         headless: job.headless,
         emulation: job.emulation ?? {},
-        profileId: job.profileId ? String(job.profileId) : undefined,
+        profileId: profile?.profileId,
+        storageState: profile?.storageState,
         signal,
       });
       // Closing the context makes any in-flight Playwright call fail fast.
@@ -281,8 +288,19 @@ export class JobRunnerService implements OnApplicationBootstrap, OnModuleDestroy
       signal.removeEventListener('abort', closeOnAbort);
       entry.context = entry.page = entry.ctx = entry.resume = undefined;
       this.emitPage(task);
+      if (lease && profile?.mode === 'session') await this.keepSession(String(job.profileId), lease);
       await lease?.release();
       releaseSlot?.();
+    }
+  }
+
+  /** Session profiles: store the cookies the task ended with (refreshed logins, new tokens). */
+  private async keepSession(profileId: string, lease: ContextLease) {
+    try {
+      await this.profiles.saveSession(profileId, await lease.context.storageState());
+    } catch (err) {
+      // Context already closed (cancelled task): keep the previous session.
+      this.logger.debug(`Session of profile ${profileId} not saved: ${errorMessage(err)}`);
     }
   }
 

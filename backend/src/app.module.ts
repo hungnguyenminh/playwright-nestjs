@@ -14,6 +14,7 @@ import { LiveModule } from './live/live.module.js';
 import { ProfilesModule } from './profiles/profiles.module.js';
 import { ScriptsModule } from './scripts/scripts.module.js';
 import { SettingsModule } from './settings/settings.module.js';
+import { SourcesModule } from './sources/sources.module.js';
 import { SystemController } from './system.controller.js';
 
 @Module({
@@ -31,6 +32,7 @@ import { SystemController } from './system.controller.js';
     AiModule,
     FlowsModule,
     DataModule,
+    SourcesModule,
   ],
   controllers: [ActionsController, SystemController],
 })

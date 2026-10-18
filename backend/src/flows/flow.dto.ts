@@ -1,6 +1,9 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsMongoId,
   IsNotEmpty,
@@ -10,7 +13,42 @@ import {
   Max,
   MaxLength,
   Min,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
+import { MAX_LIMIT, SOURCE_TYPES, type SourceType } from '../sources/connectors.js';
+
+export class SourceDto {
+  @IsIn(SOURCE_TYPES)
+  type: SourceType;
+
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  targets: string[];
+
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  keywords?: string[];
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(MAX_LIMIT)
+  limit?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  detail?: boolean;
+
+  /** '' or omitted = fresh browser. */
+  @IsOptional()
+  @IsString()
+  profileId?: string;
+}
 
 export class FlowDto {
   @IsString()
@@ -21,13 +59,27 @@ export class FlowDto {
   @IsString()
   description?: string;
 
+  @IsOptional()
+  @IsIn(['script', 'sources'])
+  kind?: 'script' | 'sources';
+
   /** '' or omitted = no profile (fresh browser for every task). */
   @IsOptional()
   @IsString()
   profileId?: string;
 
+  /** Required for script flows. */
+  @ValidateIf((o: FlowDto) => o.kind !== 'sources')
   @IsMongoId()
-  scriptId: string;
+  scriptId?: string;
+
+  /** Required for source flows. */
+  @ValidateIf((o: FlowDto) => o.kind === 'sources')
+  @IsArray()
+  @ArrayMaxSize(20)
+  @ValidateNested({ each: true })
+  @Type(() => SourceDto)
+  sources?: SourceDto[];
 
   @IsOptional()
   @IsString()

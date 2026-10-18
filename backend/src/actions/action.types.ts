@@ -105,6 +105,47 @@ export type Action = Base &
     | { type: 'evaluate'; script: string; arg?: unknown; as?: string }
     | { type: 'set'; var: string; value: unknown }
     | { type: 'log'; message: string }
+    // sources: work on pages without hand-written selectors
+    /** Close or hide popups, promo modals and cookie walls covering the page. */
+    | { type: 'dismissOverlays' }
+    /** Find the site search box, type `query` and submit; empty query = do nothing. */
+    | { type: 'searchSite'; query: string; selector?: string; as?: string }
+    /** Like extract multiple, but scrolls / presses "load more" until `limit` distinct items. */
+    | {
+        type: 'collect';
+        selector: string;
+        fields?: Record<string, string | ExtractField>;
+        limit?: number;
+        maxScrolls?: number;
+        /** true (default) = look for a "Xem thêm" button; a selector; false = only scroll. */
+        loadMore?: boolean | string;
+        /** Open each item's url and add its description / content / date. */
+        detail?: boolean;
+        /** Fields added to every item (source, keyword…). */
+        extra?: Record<string, unknown>;
+        /** Also read title / url / image / price / text automatically; `fields` override them. */
+        auto?: boolean;
+        /** Fire hover events on these elements inside each item before reading (links set on hover). */
+        hover?: string;
+        /** Click "Xem thêm / See more" inside items to read the full text. */
+        expand?: boolean;
+        /** Skip items where any of these fields is empty. */
+        required?: string[];
+        /** Add to the list already in `as` (e.g. several result pages) instead of replacing it. */
+        append?: boolean;
+        as?: string;
+      }
+    /** Detect the main list (or the article) on the page and read it without selectors. */
+    | {
+        type: 'extractAuto';
+        mode?: 'auto' | 'list' | 'article';
+        limit?: number;
+        maxScrolls?: number;
+        detail?: boolean;
+        extra?: Record<string, unknown>;
+        append?: boolean;
+        as?: string;
+      }
     // network
     | { type: 'blockResources'; resourceTypes: string[] }
     | {

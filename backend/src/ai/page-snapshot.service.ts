@@ -29,8 +29,9 @@ export class PageSnapshotService {
     profileId?: string,
     signal?: AbortSignal,
   ): Promise<PageSnapshot> {
-    // A profile can only be open once; fail fast instead of waiting for it.
-    if (profileId && this.pool.isProfileInUse(profileId)) {
+    const profile = profileId ? await this.profiles.leaseFor(profileId) : undefined;
+    // A folder profile can only be open once; fail fast instead of waiting for it.
+    if (profile?.profileId && this.pool.isProfileInUse(profile.profileId)) {
       throw new ConflictException(
         'Profile đang được dùng bởi một task khác, chưa đọc trang được',
       );
@@ -41,7 +42,8 @@ export class PageSnapshotService {
     const lease = await this.pool.lease({
       headless: true,
       emulation,
-      profileId,
+      profileId: profile?.profileId,
+      storageState: profile?.storageState,
       signal,
     });
     try {

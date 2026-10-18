@@ -64,16 +64,20 @@ export class JobsService {
     const profileEmulation = dto.profileId
       ? await this.profiles.emulationFor(dto.profileId)
       : undefined;
+    const profileMode = dto.profileId ? (await this.profiles.get(dto.profileId)).mode : undefined;
 
     const job = await this.jobs.create({
       name: dto.name || script?.name || 'Ad-hoc job',
       scriptId: script?._id,
       flowId: dto.flowId ? oid(dto.flowId) : undefined,
+      runId: dto.runId ? oid(dto.runId) : undefined,
+      source: dto.source,
       actions,
       emulation: mergeEmulation(script?.emulation, profileEmulation, dto.emulation),
       profileId: dto.profileId ? oid(dto.profileId) : undefined,
-      // A profile can only be open once, so its tasks run one after another.
-      concurrency: dto.profileId ? 1 : Math.min(dto.concurrency ?? 3, inputs.length),
+      // A folder profile can only be open once, so its tasks run one after
+      // another; session profiles (cookies in the database) can run in parallel.
+      concurrency: profileMode === 'folder' ? 1 : Math.min(dto.concurrency ?? 3, inputs.length),
       headless: dto.headless ?? this.config.headless,
       maxRetries: dto.maxRetries ?? 0,
       stepTimeout: dto.stepTimeout ?? 30_000,

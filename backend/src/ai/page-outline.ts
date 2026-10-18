@@ -15,9 +15,9 @@ export function pageOutline(maxChars: number): string {
     !/^[a-z]{1,3}\d/.test(c);
   // Ids like "mount_0_0_qM" or ":r12:" are generated per page load.
   const stableId = (id: string) =>
-    /^[a-zA-Z][w-]{1,40}$/.test(id) &&
-    !/d{3,}/.test(id) &&
-    !(/d/.test(id) && /_/.test(id));
+    /^[a-zA-Z][\w-]{1,40}$/.test(id) &&
+    !/\d{3,}/.test(id) &&
+    !(/\d/.test(id) && /_/.test(id));
   const short = (s: string | null | undefined, n = 60) =>
     (s ?? '').replace(/\s+/g, ' ').trim().slice(0, n);
   const visible = (el: Element) => {

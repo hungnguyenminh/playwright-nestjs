@@ -94,6 +94,7 @@ const GROUPS: Record<string, string[]> = {
   'Tương tác': ['click', 'dblclick', 'hover', 'focus', 'fill', 'clear', 'type', 'press', 'check', 'uncheck', 'select', 'upload', 'drag', 'scroll', 'mouse'],
   'Chờ': ['waitFor', 'sleep', 'pause'],
   'Dữ liệu': ['extract', 'screenshot', 'pdf', 'download', 'getCookies', 'setCookies', 'clearCookies', 'evaluate', 'set', 'log'],
+  'Không cần selector': ['dismissOverlays', 'searchSite', 'collect', 'extractAuto'],
   'Mạng': ['blockResources', 'intercept', 'captureResponses'],
   'Tab, iframe': ['newTab', 'switchTab', 'closeTab', 'frame', 'dialog'],
   'Điều khiển luồng': ['if', 'repeat', 'forEach', 'try', 'break', 'stop'],
@@ -135,6 +136,10 @@ const VI: Record<string, string> = {
   log: 'Ghi một dòng vào log',
   blockResources: 'Chặn tải các loại tài nguyên (image, media, font…) để chạy nhanh hơn',
   intercept: 'Chặn hoặc trả dữ liệu giả cho request khớp mẫu URL',
+  dismissOverlays: 'Đóng / ẩn popup khuyến mãi, banner cookie đang che trang',
+  searchSite: 'Tự tìm ô tìm kiếm của trang, gõ query rồi tìm (query rỗng thì bỏ qua)',
+  collect: 'Như extract multiple nhưng tự cuộn / bấm Xem thêm đến khi đủ limit mục (mặc định 50), gộp trùng theo url',
+  extractAuto: 'Tự nhận ra danh sách (sản phẩm, bài viết, kết quả) hoặc nội dung bài viết, không cần selector',
   captureResponses: 'Gom các response có URL khớp mẫu vào biến (json: lấy nội dung JSON)',
   newTab: 'Mở tab mới và chuyển sang tab đó',
   switchTab: 'Chuyển sang tab theo số thứ tự (từ 0)',
@@ -338,7 +343,7 @@ Inputs:
         <h3 class="mt-8">Dữ liệu được lưu ở đâu</h3>
         <el-table :data="[
           { d: 'Script', w: 'MongoDB: scripts' },
-          { d: 'Profile', w: 'MongoDB: profiles + thư mục backend/profiles/<id>/' },
+          { d: 'Profile', w: 'MongoDB: profiles (phiên mã hoá nếu chế độ database) + thư mục %LOCALAPPDATA%\\browser-automation\\profiles\\<id>' },
           { d: 'Job', w: 'MongoDB: jobs' },
           { d: 'Task và kết quả (result)', w: 'MongoDB: tasks' },
           { d: 'Log từng bước', w: 'MongoDB: task_logs (tự xoá sau 30 ngày)' },
@@ -358,6 +363,23 @@ Inputs:
           Cách nhanh nhất: <b>Luồng → Tạo luồng mới</b> đi qua đủ các bước. Làm tay thì theo thứ tự: <b>1. Tạo script</b> → <b>2. Tạo profile</b> (chỉ khi trang cần đăng nhập) → <b>3. Tạo job</b> →
           <b>4. Theo dõi task và lấy kết quả</b>.
         </el-alert>
+
+        <!-- Sources -->
+        <section class="mb-10">
+          <h2 class="mt-0">Cách nhanh nhất để lấy dữ liệu: luồng kéo từ nguồn</h2>
+          <p>
+            Không cần viết script. Vào <NuxtLink to="/flows/new">Tạo luồng mới</NuxtLink>, chọn <b>📥 Kéo dữ liệu từ nguồn có sẵn</b>, rồi thêm nguồn:
+          </p>
+          <ul class="space-y-1 pl-5">
+            <li><b>Website khác</b>: nhập link. Không nhập từ khoá thì lấy danh sách (sản phẩm, bài viết…) ngay tại link; có từ khoá thì tool gõ vào ô tìm kiếm của trang rồi lấy kết quả.</li>
+            <li><b>Facebook group</b>: nhập link group, cần profile đã đăng nhập Facebook.</li>
+            <li><b>Google, YouTube, TikTok, Threads, Shopee</b>: nhập từ khoá. Shopee cần đăng nhập; Google / TikTok hay hỏi captcha, khi đó task tạm dừng, bạn bấm <b>Take control</b> để giải rồi <b>Resume</b>.</li>
+          </ul>
+          <p>
+            Mỗi nguồn nhập được nhiều link / từ khoá (mỗi dòng một mục, mỗi mục một task), mặc định lấy 50 mục; bật <b>Vào từng kết quả lấy chi tiết</b> nếu cần mô tả / nội dung đầy đủ.
+            Bấm <b>▶ Chạy thử</b> để thử nhanh với 5 mục. Mỗi lần chạy luồng tạo một job cho mỗi nguồn; dữ liệu mỗi nguồn là một bảng trong trang <NuxtLink to="/data">Dữ liệu</NuxtLink>.
+          </p>
+        </section>
 
         <!-- Flows -->
         <section class="mb-10">

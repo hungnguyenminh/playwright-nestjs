@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { Browser, BrowserContext, chromium } from 'playwright';
+import { Browser, BrowserContext, BrowserContextOptions, chromium } from 'playwright';
 import { Semaphore } from '../common/semaphore.js';
 import { appConfig, type AppConfig } from '../config/app.config.js';
 import { Emulation, toContextOptions } from './emulation.js';
@@ -11,6 +11,8 @@ export interface LeaseOptions {
   emulation: Emulation;
   /** Use a persistent Chrome profile (user data dir) instead of a throwaway context. */
   profileId?: string;
+  /** Throwaway context only: start with these cookies / localStorage (session-mode profiles). */
+  storageState?: BrowserContextOptions['storageState'];
   signal?: AbortSignal;
 }
 
@@ -85,9 +87,10 @@ export class BrowserPoolService implements OnModuleDestroy {
     const pooled = await this.pickBrowser(opts.headless);
     let context: BrowserContext;
     try {
-      context = await pooled.browser.newContext(
-        toContextOptions(opts.emulation),
-      );
+      context = await pooled.browser.newContext({
+        ...toContextOptions(opts.emulation),
+        storageState: opts.storageState,
+      });
     } catch (err) {
       this.onContextClosed(pooled);
       throw err;

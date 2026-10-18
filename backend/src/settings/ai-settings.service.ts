@@ -11,7 +11,7 @@ import {
   describeAiError,
 } from '../ai/ai-client.js';
 import { AiSettingsDto } from './ai-settings.dto.js';
-import { ensureSettingsSecret, SecretBox } from './secret-box.js';
+import { SecretBox } from './secret-box.js';
 import { Setting } from './setting.schema.js';
 
 const KEY = 'ai';
@@ -52,10 +52,10 @@ const hint = (token: string) => token.slice(-4);
 @Injectable()
 export class AiSettingsService {
   private readonly logger = new Logger(AiSettingsService.name);
-  private readonly box = new SecretBox(ensureSettingsSecret());
 
   constructor(
     @InjectModel(Setting.name) private readonly settings: Model<Setting>,
+    private readonly box: SecretBox,
   ) {}
 
   private async stored(): Promise<StoredAi> {

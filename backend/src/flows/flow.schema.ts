@@ -1,5 +1,8 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes, Types } from 'mongoose';
+import type { SourceSpec } from '../sources/connectors.js';
+
+export type FlowKind = 'script' | 'sources';
 
 /**
  * A saved "Luồng": which profile (optional), which script, and how to run it
@@ -14,11 +17,20 @@ export class Flow {
   @Prop({ type: String, default: '' })
   description: string;
 
+  /** 'script': one script run over inputs. 'sources': built-in readers for websites / platforms. */
+  @Prop({ type: String, default: 'script' })
+  kind: FlowKind;
+
   @Prop({ type: SchemaTypes.ObjectId })
   profileId?: Types.ObjectId;
 
-  @Prop({ type: SchemaTypes.ObjectId, required: true })
-  scriptId: Types.ObjectId;
+  /** Script flows only. */
+  @Prop({ type: SchemaTypes.ObjectId })
+  scriptId?: Types.ObjectId;
+
+  /** Source flows only: one job per source on each run. */
+  @Prop({ type: SchemaTypes.Mixed, default: [] })
+  sources: SourceSpec[];
 
   /** Task inputs as typed in the wizard: CSV with a header row, or JSON. */
   @Prop({ type: String, default: '' })
@@ -48,6 +60,10 @@ export class Flow {
 
   @Prop({ type: SchemaTypes.ObjectId })
   lastJobId?: Types.ObjectId;
+
+  /** Source flows: the run (group of jobs) started last. */
+  @Prop({ type: SchemaTypes.ObjectId })
+  lastRunId?: Types.ObjectId;
 }
 
 export type FlowDocument = HydratedDocument<Flow>;

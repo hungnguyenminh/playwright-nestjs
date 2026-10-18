@@ -31,6 +31,9 @@ export interface Job {
   name: string;
   scriptId?: string;
   flowId?: string;
+  /** Jobs started together by one run of a source flow. */
+  runId?: string;
+  source?: SourceType;
   actions?: Action[];
   profileId?: string;
   status: JobStatus;
@@ -98,6 +101,12 @@ export interface Profile {
   proxy?: Emulation['proxy'];
   lastUsedAt?: string;
   inUse?: boolean;
+  /** folder = Chrome user-data dir (one task at a time); session = cookies in the database (parallel). */
+  mode: 'folder' | 'session';
+  sessionCookies?: number;
+  sessionUpdatedAt?: string;
+  /** Page last used to log in with this profile. */
+  loginUrl?: string;
 }
 
 export interface Paged<T> {
@@ -131,12 +140,43 @@ export const FINISHED: TaskStatus[] = ['done', 'failed', 'cancelled'];
 export const totalOf = (t: Totals) => Object.values(t).reduce((a, b) => a + b, 0);
 
 /** A saved "Luồng": profile (optional) + script + job settings. */
+export type SourceType = 'website' | 'facebook' | 'google' | 'youtube' | 'tiktok' | 'threads' | 'shopee';
+
+export interface SourceSpec {
+  type: SourceType;
+  /** Links (website, facebook) or keywords (the others). */
+  targets: string[];
+  /** Website only. */
+  keywords?: string[];
+  limit?: number;
+  detail?: boolean;
+  profileId?: string;
+}
+
+export interface SourceInfo {
+  type: SourceType;
+  label: string;
+  target: 'link' | 'keyword';
+  placeholder: string;
+  login: 'required' | 'recommended' | 'no';
+  loginUrl?: string;
+  note: string;
+}
+
+export interface SourceCatalog {
+  defaultLimit: number;
+  maxLimit: number;
+  sources: SourceInfo[];
+}
+
 export interface Flow {
   _id: string;
   name: string;
   description: string;
+  kind: 'script' | 'sources';
   profileId?: string;
-  scriptId: string;
+  scriptId?: string;
+  sources: SourceSpec[];
   inputsText: string;
   vars: Record<string, unknown>;
   concurrency: number;
@@ -147,6 +187,7 @@ export interface Flow {
   runs: number;
   lastRunAt?: string;
   lastJobId?: string;
+  lastRunId?: string;
   createdAt: string;
   updatedAt: string;
 }

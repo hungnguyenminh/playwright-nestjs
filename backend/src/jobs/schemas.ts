@@ -37,6 +37,14 @@ export class Job {
   @Prop({ type: SchemaTypes.ObjectId, index: true })
   flowId?: Types.ObjectId;
 
+  /** Jobs started together by one run of a multi-source flow share this id. */
+  @Prop({ type: SchemaTypes.ObjectId, index: true })
+  runId?: Types.ObjectId;
+
+  /** Data source the job reads (website, youtube…), for source flows. */
+  @Prop({ type: String })
+  source?: string;
+
   /** Snapshot of the script at creation, so later edits don't affect the job. */
   @Prop({ type: SchemaTypes.Mixed, required: true })
   actions: Action[];

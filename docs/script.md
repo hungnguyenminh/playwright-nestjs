@@ -265,6 +265,23 @@ Bốn dạng hay dùng:
 
 Lưu ý khi viết JS bên trong chuỗi JSON: dấu `"` phải viết thành `\"`, nên dễ nhất là dùng dấu nháy đơn `'` hoặc backtick trong JS. Xuống dòng viết là `\n`.
 
+#### Lấy dữ liệu không cần selector (dùng cho luồng "nguồn")
+
+| Action | Tham số | Ghi chú |
+| --- | --- | --- |
+| `dismissOverlays` | | Đóng / ẩn popup khuyến mãi, banner cookie đang che trang (Esc → nút đóng → ẩn lớp phủ). |
+| `searchSite` | `query`, `selector?`, `as?` | Tự tìm ô tìm kiếm của trang (kể cả ô chỉ-đọc mở ra khung tìm kiếm), gõ `query`, Enter / bấm nút tìm. `query` rỗng thì bỏ qua. Log ghi lại mẫu URL kết quả, ví dụ `…/tim-kiem?key={{keyword}}`. |
+| `collect` | `selector`, `fields?`, `limit` (50), `maxScrolls` (30), `loadMore` (true / selector / false), `detail?`, `extra?`, `auto?`, `required?`, `hover?`, `expand?`, `append?`, `as` (`items`) | Như `extract multiple` nhưng tự cuộn hoặc bấm "Xem thêm" đến khi đủ `limit` mục khác nhau (gộp theo url). `required`: bỏ mục thiếu các trường này. `auto`: tự lấy title/url/image/price/text, `fields` ghi đè. `hover`: rê chuột vào các phần tử này trước khi đọc (Facebook chỉ gắn link bài khi rê chuột). `expand`: bấm "Xem thêm" trong từng mục để đọc đủ nội dung. `append`: cộng dồn vào danh sách đã có (nhiều trang kết quả). `detail`: mở link từng mục, lấy thêm mô tả, nội dung, ngày đăng, giá, thương hiệu… |
+| `extractAuto` | `mode` (`auto` / `list` / `article`), `limit`, `maxScrolls`, `detail?`, `extra?`, `append?`, `as` | Tự nhận ra danh sách chính của trang (sản phẩm, bài viết, kết quả tìm kiếm) và đọc title, url, image, price, time, text. Không có danh sách thì đọc bài viết / trang sản phẩm (title, description, text, ngày đăng, JSON-LD). `mode: "list"`: không thấy danh sách thì trả về rỗng. |
+
+```json
+[
+  { "type": "goto", "url": "https://www.thegioididong.com/" },
+  { "type": "searchSite", "query": "{{keyword}}" },
+  { "type": "extractAuto", "mode": "list", "limit": 50, "extra": { "keyword": "{{keyword}}" }, "as": "products" }
+]
+```
+
 ### 5.5 Mạng
 
 | Action | Tham số | Ghi chú |

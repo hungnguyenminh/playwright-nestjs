@@ -27,6 +27,18 @@ export class ProfilesController {
     return this.profiles.update(id, dto);
   }
 
+  /** Copy cookies + localStorage from the Chrome folder into the database (switches to session mode). */
+  @Post(':id/import-session')
+  @HttpCode(200)
+  importSession(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.profiles.importFromFolder(id);
+  }
+
+  @Delete(':id/session')
+  clearSession(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.profiles.clearSession(id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   remove(@Param('id', ParseObjectIdPipe) id: string) {

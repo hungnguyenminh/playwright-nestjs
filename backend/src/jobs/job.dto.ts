@@ -27,6 +27,15 @@ export class CreateJobDto {
   @IsMongoId()
   flowId?: string;
 
+  /** Run of a multi-source flow this job belongs to. */
+  @IsOptional()
+  @IsMongoId()
+  runId?: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
   /** ...or inline actions (wins over the script's actions if both are given). */
   @IsOptional()
   @IsArray()

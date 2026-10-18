@@ -15,7 +15,7 @@ Tài liệu này giải thích các khái niệm chính của tool: **Script**, 
 | Khái niệm | Trả lời câu hỏi | Lưu ở đâu |
 | --- | --- | --- |
 | **Script** | Làm gì trên trang? | MongoDB, collection `scripts` |
-| **Profile** | Chạy bằng "người dùng Chrome" nào (đăng nhập, cookie, proxy)? | collection `profiles` + thư mục `backend/profiles/<id>/` |
+| **Profile** | Chạy bằng "người dùng Chrome" nào (đăng nhập, cookie, proxy)? | collection `profiles` + thư mục profile (mặc định `%LOCALAPPDATA%\browser-automation\profiles\<id>\`) |
 | **Job** | Chạy lúc nào, bao nhiêu Chrome song song, chế độ nào? | collection `jobs` |
 | **Task** | Chạy với đầu vào cụ thể nào, ra kết quả gì? | collection `tasks` (kết quả trong `result`) |
 
@@ -89,14 +89,19 @@ Biến nào được tạo bằng `extract`, `evaluate` (có `as`), `getCookies`
 
 ## 2. Profile
 
-Profile là **một thư mục dữ liệu Chrome riêng**, giống một "người dùng Chrome", lưu cookie, phiên đăng nhập, localStorage… Thư mục nằm ở `backend/profiles/<id>/`.
+Profile giữ **phiên đăng nhập** giữa các lần chạy, giống một "người dùng Chrome". Có hai chế độ lưu phiên:
 
-| | Không dùng profile | Dùng profile |
-| --- | --- | --- |
-| Trình duyệt | Mỗi task một Chrome mới, sạch trơn | Mở lại đúng thư mục dữ liệu cũ |
-| Đăng nhập | Mất sau khi chạy xong | **Giữ nguyên** giữa các lần chạy |
-| Song song | Chạy nhiều task cùng lúc | Mỗi lúc **chỉ một task** dùng được profile đó |
-| Phù hợp cho | Trang công khai, chạy số lượng lớn | Trang cần đăng nhập (Facebook, Shopee, …) |
+| | Không dùng profile | Profile · **Thư mục Chrome** (mặc định) | Profile · **Trong database** |
+| --- | --- | --- | --- |
+| Lưu ở đâu | Không lưu | Thư mục dữ liệu Chrome: `%LOCALAPPDATA%\browser-automation\profiles\<id>\` (đổi bằng `PROFILES_DIR`) | MongoDB `profiles`, cookie + localStorage **mã hoá AES** bằng `SETTINGS_SECRET` |
+| Lưu những gì | | Mọi thứ Chrome giữ: cookie, localStorage, IndexedDB, cache, lịch sử… | Cookie và localStorage |
+| Song song | Nhiều task cùng lúc | Mỗi lúc **chỉ một task** (Chrome khoá thư mục) | **Nhiều task cùng lúc**, dùng chung phiên |
+| Sau mỗi task | | Chrome tự ghi vào thư mục | Phiên mới (cookie được làm mới) được lưu lại |
+| Phù hợp cho | Trang công khai | Trang cần đăng nhập, giữ phiên ổn định nhất (Facebook…) | Trang cần đăng nhập mà muốn chạy song song |
+
+Nơi lưu phiên không quyết định việc trang web có nghi ngờ hay không (cookie là như nhau). Điều cần cân nhắc: chế độ database không giữ IndexedDB, nên vài trang có thể hỏi đăng nhập lại; và dùng **một tài khoản ở nhiều Chrome cùng lúc** là điều một số trang theo dõi.
+
+Chuyển một profile thư mục sang database: trang **Profiles → Phiên ▾ → Chuyển phiên từ thư mục vào DB** (thư mục vẫn được giữ).
 
 Mỗi profile có thể có thêm:
 
@@ -193,7 +198,7 @@ Khi gặp captcha, OTP hay bước cần người làm:
 | Dữ liệu | Nơi lưu |
 | --- | --- |
 | Script | MongoDB `scripts` |
-| Profile | MongoDB `profiles` + thư mục `backend/profiles/<id>/` |
+| Profile | MongoDB `profiles` (phiên mã hoá nếu ở chế độ database) + thư mục `%LOCALAPPDATA%\browser-automation\profiles\<id>\` |
 | Job | MongoDB `jobs` |
 | Task và **kết quả** (`result`) | MongoDB `tasks` |
 | Log từng bước | MongoDB `task_logs` (tự xoá sau 30 ngày) |
@@ -265,3 +270,22 @@ Luồng "Theo dõi giá"
 - Mục có cùng `url` / `link` / `href` / `id` được **gộp** qua các lần chạy; mỗi dòng có thời điểm gặp lần đầu, lần cuối và số lần gặp.
 - Dữ liệu **vẫn còn khi xoá job**; muốn xoá thì dùng nút *Xoá bộ dữ liệu* hoặc xoá từng dòng trên trang Dữ liệu.
 - Tải về: **CSV** (mở bằng Excel, đúng tiếng Việt) hoặc **JSON**.
+
+## 9. Luồng kéo dữ liệu từ nguồn
+
+Khi tạo luồng, chọn **📥 Kéo dữ liệu từ nguồn có sẵn**: không cần viết script, chỉ cần thêm nguồn và nhập link / từ khoá (mỗi dòng một mục).
+
+| Nguồn | Nhập | Lấy được | Đăng nhập |
+| --- | --- | --- | --- |
+| Website khác | link (+ từ khoá tuỳ chọn) | Không từ khoá: danh sách (hoặc nội dung) ngay tại link. Có từ khoá: gõ vào ô tìm kiếm của trang rồi lấy kết quả. Mỗi link × từ khoá là một task. | không cần |
+| Facebook group | link group | bài mới nhất: tác giả, nội dung, link, thời gian, ảnh | **cần** profile đã đăng nhập |
+| Google | từ khoá | tiêu đề, link, mô tả, trang (10 kết quả / trang) | nên có; hay hỏi captcha |
+| YouTube | từ khoá | tiêu đề, link, kênh, lượt xem, ngày đăng, thời lượng, ảnh | không cần |
+| TikTok | từ khoá | video: mô tả, link, tác giả, lượt xem | nên có; hay bắt kéo thanh trượt |
+| Threads | từ khoá | tác giả, nội dung, link, thời gian | nên có (không đăng nhập chỉ thấy vài bài) |
+| Shopee | từ khoá | tên, giá, link, ảnh | **cần** profile đã đăng nhập |
+
+- Mỗi nguồn có: **số mục mỗi link / từ khoá** (mặc định 50), **Vào từng kết quả lấy chi tiết** (mặc định tắt, chậm hơn nhiều), **profile** (với trang cần đăng nhập; đăng nhập ngay trong thẻ nguồn), nút **▶ Chạy thử** (link / từ khoá đầu tiên, 5 mục, hiện cửa sổ Chrome) và **Xem script** (script được tạo tự động).
+- Mỗi lần chạy luồng tạo **một job cho mỗi nguồn** (các job cùng lần chạy có chung `runId`), mỗi link / từ khoá là một task.
+- Dữ liệu vào trang **Dữ liệu**, mỗi loại nguồn một bảng (`website`, `youtube`, `facebook`…), mỗi dòng có `source`, `keyword` / `from` / `group` cho biết lấy từ đâu; mục trùng url được gộp.
+- Gặp **captcha / trang đăng nhập**, task chuyển sang *paused* với lời nhắc: mở task, bấm **Take control** để giải / đăng nhập ngay trên live view, rồi **Resume**.

@@ -2,9 +2,15 @@ import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { HydratedDocument, SchemaTypes } from 'mongoose';
 import type { Emulation } from '../browser/emulation.js';
 
+export type ProfileMode = 'folder' | 'session';
+
 /**
- * A persistent Chrome profile (its own user data dir under PROFILES_DIR/<id>),
- * keeps cookies / logins between jobs. One task at a time per profile.
+ * A logged-in identity reused across jobs, in one of two modes:
+ * - folder: a real Chrome user-data dir under PROFILES_DIR/<id> (everything
+ *   Chrome keeps: cookies, IndexedDB, cache…). One task at a time.
+ * - session: cookies + localStorage (Playwright storage state) encrypted in
+ *   Mongo and loaded into a fresh context per task, so tasks can run in
+ *   parallel; updated after every task.
  */
 @Schema({ collection: 'profiles', timestamps: true })
 export class Profile {
@@ -17,6 +23,19 @@ export class Profile {
   @Prop({ type: String })
   userDataDir: string;
 
+  @Prop({ type: String, default: 'folder' })
+  mode: ProfileMode;
+
+  /** Session mode: encrypted JSON storage state. Never sent to the browser. */
+  @Prop({ type: String })
+  sessionSealed?: string;
+
+  @Prop({ type: Number, default: 0 })
+  sessionCookies: number;
+
+  @Prop({ type: Date })
+  sessionUpdatedAt?: Date;
+
   @Prop({ type: SchemaTypes.Mixed, default: {} })
   emulation: Emulation;
 
@@ -25,6 +44,10 @@ export class Profile {
 
   @Prop({ type: Date })
   lastUsedAt?: Date;
+
+  /** Page last used with "Mở để đăng nhập", offered again next time. */
+  @Prop({ type: String, default: '' })
+  loginUrl: string;
 }
 
 export type ProfileDocument = HydratedDocument<Profile>;

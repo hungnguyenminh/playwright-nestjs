@@ -26,7 +26,7 @@ Mở http://localhost:3000.
 
 Biến môi trường của backend (`backend/.env`): `PORT`, `MONGODB_URI`, `FRONTEND_ORIGIN`, `HEADLESS`,
 `MAX_CONCURRENCY` (tổng số context Chrome cùng lúc), `CONTEXTS_PER_BROWSER` (số context trên mỗi tiến trình Chrome),
-`STORAGE_DIR` (ảnh chụp, PDF, file tải về), `PROFILES_DIR` (thư mục user-data của các profile).
+`STORAGE_DIR` (ảnh chụp, PDF, file tải về), `PROFILES_DIR` (thư mục user-data của các profile; mặc định `%LOCALAPPDATA%\browser-automation\profiles`, ngoài thư mục dự án, profile cũ được tự chuyển sang).
 
 ## Khái niệm
 
@@ -35,7 +35,7 @@ Biến môi trường của backend (`backend/.env`): `PORT`, `MONGODB_URI`, `FR
 
 - **Script**: danh sách action (DSL JSON), có `defaultVars` và `emulation`. Chuỗi trong action dùng biến dạng `{{name}}` / `{{obj.path}}`.
 - **Job**: chạy một script với danh sách `inputs`, mỗi input là một **task** (một context Chrome riêng). Có `concurrency`, `headless`, `maxRetries`, `stepTimeout`, và `profileId` (tuỳ chọn).
-- **Profile**: thư mục user-data Chrome riêng, giữ cookie và đăng nhập giữa các job. Mỗi lúc chỉ một task được dùng một profile. Trang Profiles có nút *Open to log in* để mở Chrome và đăng nhập bằng tay.
+- **Profile**: giữ cookie và đăng nhập giữa các job, ở một trong hai chế độ: **thư mục Chrome** (đầy đủ nhất, mỗi lúc một task) hoặc **trong database** (cookie + localStorage mã hoá AES, nhiều task chạy song song, phiên được lưu lại sau mỗi task). Trang Profiles có nút *Mở để đăng nhập* và *Phiên ▾ → Chuyển phiên từ thư mục vào DB*.
 
 - **Takeover**: trên trang task, bấm *Pause* (script dừng trước bước kế tiếp) hoặc dùng action `pause`, rồi bật *Take control* để điều khiển chuột và bàn phím ngay trên live view, kể cả ở chế độ headless. Ctrl+V dán clipboard của máy bạn. Bấm *Resume* để script chạy tiếp.
 
@@ -44,6 +44,7 @@ Danh sách action đầy đủ có ở `backend/src/actions/action.schema.ts` (`
 - điều hướng: `goto` `back` `forward` `reload`
 - tương tác: `click` `dblclick` `hover` `focus` `fill` `clear` `type` `press` `check` `uncheck` `select` `upload` `drag` `scroll` `mouse`
 - chờ: `waitFor` `sleep` `pause` (chờ người bấm Resume trên UI, ví dụ để giải captcha)
+- không cần selector: `dismissOverlays` `searchSite` `collect` `extractAuto`
 - dữ liệu: `extract` `screenshot` `pdf` `download` `getCookies` `setCookies` `clearCookies` `evaluate` `set` `log`
 - mạng: `blockResources` `intercept` `captureResponses`
 - tab và iframe: `newTab` `switchTab` `closeTab` `frame` `dialog`
@@ -63,6 +64,7 @@ Mọi action đều nhận `timeout`, `optional: true` (lỗi thì bỏ qua) và
 ## Luồng và Dữ liệu
 
 - **Luồng** (menu *Luồng*): mỗi việc mới gom profile (nếu cần đăng nhập) + script + inputs + cách chạy. Wizard *Tạo luồng mới* đi qua 5 bước: mục tiêu → profile (tạo mới và đăng nhập ngay trong trang) → script (có sẵn / tự viết / AI, có chạy thử) → job & task → xác nhận. Trang chi tiết luồng có nút *Chạy ngay*, *Chạy với input khác*, lịch sử các lần chạy, và link tới dữ liệu.
+- **Luồng kéo dữ liệu từ nguồn**: chọn *📥 Kéo dữ liệu từ nguồn có sẵn* trong wizard, thêm các nguồn Website khác (link, từ khoá tuỳ chọn: có từ khoá thì gõ vào ô tìm kiếm của trang), Facebook group (link), Google / YouTube / TikTok / Threads / Shopee (từ khoá). Mặc định 50 mục mỗi link / từ khoá, chế độ lấy chi tiết tắt. Mỗi lần chạy tạo một job cho mỗi nguồn (chung `runId`); dữ liệu mỗi nguồn một bảng. Chi tiết: [docs/khai-niem.md mục 9](docs/khai-niem.md).
 - **Dữ liệu** (menu *Dữ liệu*): kết quả của mọi task chạy xong được tự lưu vào collection `records`, theo luồng (hoặc script, nếu chạy ngoài luồng) và theo tên biến kết quả (ví dụ `posts`). Mảng object → mỗi phần tử 1 dòng; các giá trị đơn (title, price…) → 1 dòng mỗi task trong bộ "kết quả". Mục có cùng `url` / `link` / `href` / `id` được gộp qua các lần chạy (lưu thời điểm gặp lần đầu, lần cuối và số lần gặp). Dữ liệu vẫn còn khi xoá job. Có tìm kiếm, tải CSV (có BOM để Excel đọc đúng tiếng Việt) và JSON. Lần đầu khởi động sau khi có tính năng này, kết quả của các task đã chạy trước đó được nhập vào luôn.
 
 
@@ -79,7 +81,7 @@ Các trang **Script**, **Profile** (nút *✨ Tạo bằng AI*) và **New job** 
 
 ```
 GET/POST /scripts            GET/PUT/DELETE /scripts/:id
-GET/POST /profiles           GET/PUT/DELETE /profiles/:id
+GET/POST /profiles           GET/PUT/DELETE /profiles/:id   POST /profiles/:id/import-session   DELETE /profiles/:id/session
 POST /jobs                   { scriptId | actions, inputs[], vars?, concurrency?, headless?, profileId?, maxRetries?, stepTimeout? }
 GET  /jobs?status=&page=&limit=          GET /jobs/:id    GET /jobs/:id/tasks
 POST /jobs/:id/cancel        POST /jobs/:id/retry { useLatestScript? }        DELETE /jobs/:id
@@ -88,7 +90,9 @@ POST /tasks/:id/cancel       POST /tasks/:id/pause         POST /tasks/:id/resum
 GET  /artifacts/:id[?download=1]
 GET  /actions/schema         POST /actions/validate        GET /system
 GET/PUT /settings/ai         POST /settings/ai/test        POST /settings/ai/models
-GET/POST /flows              GET/PUT/DELETE /flows/:id     POST /flows/:id/run { inputsText?, vars?, headless? }     GET /flows/:id/jobs
+GET/POST /flows              { kind: 'script'|'sources', scriptId? | sources[]: { type, targets[], keywords?, limit?, detail?, profileId? } … }
+GET/PUT/DELETE /flows/:id    POST /flows/:id/run { inputsText?, vars?, headless? } (nguồn → { runId, jobs })     GET /flows/:id/jobs
+GET  /sources                POST /sources/preview { source }      POST /sources/test { source, headless? }
 GET  /data/datasets          GET /data/records?scope=&dataset=&q=&page=&limit=
 GET  /data/export?scope=&dataset=&format=csv|json            DELETE /data/records?scope=&dataset=    DELETE /data/records/:id
 GET  /ai/status

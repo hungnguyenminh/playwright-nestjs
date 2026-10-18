@@ -1,16 +1,31 @@
 <script setup lang="ts">
-import type { Flow, Job, Paged, Profile, Script, Task, TaskPatch } from '~/types/api';
+import type { Flow, Job, Paged, Profile, Script, SourceCatalog, SourceSpec, Task, TaskPatch } from '~/types/api';
 
 /**
- * Wizard for a new "Luồng": goal → profile (if the site needs a login) →
- * script → job & tasks → confirm. `?id=` edits an existing flow.
+ * Wizard for a new "Luồng". Two kinds:
+ * - sources: goal → sources (website, Facebook, YouTube…) → how to run → confirm;
+ * - script: goal → profile (if the site needs a login) → script → job & tasks → confirm.
+ * `?id=` edits an existing flow.
  */
 const route = useRoute();
 const editId = computed(() => (route.query.id as string) || '');
 const { api } = useApi();
 
+type StepKey = 'goal' | 'sources' | 'profile' | 'script' | 'run' | 'confirm';
+const STEP_TITLES: Record<StepKey, string> = {
+  goal: 'Mục tiêu',
+  sources: 'Nguồn',
+  profile: 'Profile',
+  script: 'Script',
+  run: 'Job & task',
+  confirm: 'Xác nhận',
+};
+const kind = ref<Flow['kind']>('sources');
+const STEPS = computed<StepKey[]>(() =>
+  kind.value === 'sources' ? ['goal', 'sources', 'run', 'confirm'] : ['goal', 'profile', 'script', 'run', 'confirm'],
+);
 const step = ref(0);
-const STEPS = ['Mục tiêu', 'Profile', 'Script', 'Job & task', 'Xác nhận'];
+const cur = computed(() => STEPS.value[step.value]);
 
 const scripts = ref<Script[]>([]);
 const profiles = ref<Profile[]>([]);
@@ -18,12 +33,26 @@ const schema = ref<object>();
 
 const goal = reactive({ name: '', description: '', needsLogin: false });
 
+// ---- sources ---------------------------------------------------------------
+const catalog = ref<SourceCatalog>();
+const sources = ref<SourceSpec[]>([]);
+const nonEmpty = (l?: string[]) => (l ?? []).map((x) => x.trim()).filter(Boolean);
+const sourcesTaskCount = computed(() =>
+  sources.value.reduce(
+    (n, src) => n + new Set(nonEmpty(src.targets)).size * (src.type === 'website' ? Math.max(1, new Set(nonEmpty(src.keywords)).size) : 1),
+    0,
+  ),
+);
+const sourceLabel = (src: SourceSpec) => catalog.value?.sources.find((c) => c.type === src.type)?.label ?? src.type;
+
 // ---- profile -------------------------------------------------------------
 const profileMode = ref<'existing' | 'new' | 'none'>('none');
 const profileId = ref('');
-const newProfile = reactive({ name: '', notes: '', proxyServer: '', proxyUser: '', proxyPass: '', emulationText: '{\n  "locale": "vi-VN",\n  "timezoneId": "Asia/Ho_Chi_Minh"\n}' });
+const newProfile = reactive({ name: '', notes: '', mode: 'folder' as Profile['mode'], proxyServer: '', proxyUser: '', proxyPass: '', emulationText: '{\n  "locale": "vi-VN",\n  "timezoneId": "Asia/Ho_Chi_Minh"\n}' });
 const creatingProfile = ref(false);
 const selectedProfile = computed(() => profiles.value.find((p) => p._id === profileId.value));
+/** Folder profiles hold a Chrome lock: one task at a time. */
+const sequential = computed(() => profileMode.value !== 'none' && selectedProfile.value?.mode !== 'session' && !!profileId.value);
 
 watch(
   () => goal.needsLogin,
@@ -49,6 +78,7 @@ async function createProfile() {
         body: {
           name: newProfile.name.trim(),
           notes: newProfile.notes,
+          mode: newProfile.mode,
           emulation,
           proxy: newProfile.proxyServer
             ? { server: newProfile.proxyServer, username: newProfile.proxyUser || undefined, password: newProfile.proxyPass || undefined }
@@ -229,19 +259,31 @@ function applyJobAi(p: Record<string, any>) {
 
 // ---- navigation ----------------------------------------------------------------
 async function next() {
-  if (step.value === 0) {
+  if (cur.value === 'goal') {
     if (!goal.name.trim()) return ElMessage.error('Đặt tên cho luồng');
     if (!draft.name) draft.name = goal.name;
   }
-  if (step.value === 1 && profileMode.value !== 'none' && !profileId.value) {
+  if (cur.value === 'sources') {
+    if (!sources.value.length) return ElMessage.error('Thêm ít nhất một nguồn');
+    const empty = sources.value.find((src) => !nonEmpty(src.targets).length);
+    if (empty) return ElMessage.error(`${sourceLabel(empty)}: nhập link / từ khoá`);
+  }
+  if (cur.value === 'profile' && profileMode.value !== 'none' && !profileId.value) {
     return ElMessage.error(profileMode.value === 'new' ? 'Bấm "Tạo profile" trước' : 'Chọn profile');
   }
-  if (step.value === 2) {
+  if (cur.value === 'script') {
     if (scriptMode.value === 'existing' && !scriptId.value) return ElMessage.error('Chọn script');
     if (scriptMode.value === 'new' && !(await saveScript())) return;
   }
-  if (step.value === 3 && parsedInputs.value.error) return ElMessage.error(`Inputs: ${parsedInputs.value.error}`);
-  step.value = Math.min(step.value + 1, STEPS.length - 1);
+  if (cur.value === 'run' && kind.value === 'script' && parsedInputs.value.error) {
+    return ElMessage.error(`Inputs: ${parsedInputs.value.error}`);
+  }
+  step.value = Math.min(step.value + 1, STEPS.value.length - 1);
+}
+
+function chooseKind(k: Flow['kind']) {
+  kind.value = k;
+  step.value = 0;
 }
 const back = () => (step.value = Math.max(0, step.value - 1));
 
@@ -256,18 +298,25 @@ async function finish(runNow: boolean) {
   } catch (err) {
     return ElMessage.error((err as Error).message);
   }
-  const body = {
+  const common = {
     name: goal.name.trim(),
     description: goal.description,
-    profileId: profileMode.value === 'none' ? '' : profileId.value,
-    scriptId: finalScriptId.value,
-    inputsText: run.inputsText,
     vars,
     concurrency: run.concurrency,
     headless: run.headless,
     maxRetries: run.maxRetries,
     stepTimeout: run.stepTimeout,
   };
+  const body =
+    kind.value === 'sources'
+      ? { ...common, kind: 'sources', sources: sources.value.map((src) => ({ ...src, profileId: src.profileId || undefined })) }
+      : {
+          ...common,
+          kind: 'script',
+          profileId: profileMode.value === 'none' ? '' : profileId.value,
+          scriptId: finalScriptId.value,
+          inputsText: run.inputsText,
+        };
   saving.value = true;
   const flow = await tryApi(() =>
     editId.value ? api<Flow>(`/flows/${editId.value}`, { method: 'PUT', body }) : api<Flow>('/flows', { method: 'POST', body }),
@@ -278,22 +327,26 @@ async function finish(runNow: boolean) {
 }
 
 onMounted(async () => {
-  const [s, p, sc] = await Promise.all([
+  const [s, p, sc, cat] = await Promise.all([
     tryApi(() => api<Script[]>('/scripts')),
     tryApi(() => api<Profile[]>('/profiles')),
     tryApi(() => api<object>('/actions/schema')),
+    tryApi(() => api<SourceCatalog>('/sources')),
   ]);
   scripts.value = s ?? [];
   profiles.value = p ?? [];
   schema.value = sc;
+  catalog.value = cat;
   if (!editId.value) return;
   const flow = await tryApi(() => api<Flow>(`/flows/${editId.value}`));
   if (!flow) return;
+  kind.value = flow.kind ?? 'script';
+  sources.value = (flow.sources ?? []).map((src) => ({ ...src, profileId: src.profileId ?? '' }));
   Object.assign(goal, { name: flow.name, description: flow.description, needsLogin: !!flow.profileId });
   profileMode.value = flow.profileId ? 'existing' : 'none';
   profileId.value = flow.profileId ?? '';
   scriptMode.value = 'existing';
-  scriptId.value = flow.scriptId;
+  scriptId.value = flow.scriptId ?? '';
   Object.assign(run, {
     inputsText: flow.inputsText,
     varsText: Object.keys(flow.vars ?? {}).length ? JSON.stringify(flow.vars, null, 2) : '',
@@ -316,26 +369,46 @@ watch(scriptId, async (id) => {
   <div class="page !max-w-6xl">
     <PageHeader
       :title="editId ? 'Sửa luồng' : 'Tạo luồng mới'"
-      subtitle="Đi qua từng bước: mục tiêu → profile → script → job & task → xác nhận."
+      :subtitle="
+        kind === 'sources'
+          ? 'Đi qua từng bước: mục tiêu → nguồn → cách chạy → xác nhận.'
+          : 'Đi qua từng bước: mục tiêu → profile → script → job & task → xác nhận.'
+      "
       back="/flows"
     />
 
     <el-card shadow="never">
       <el-steps :active="step" finish-status="success" align-center>
-        <el-step v-for="(s, i) in STEPS" :key="s" :title="s" class="cursor-pointer" @click="i < step && (step = i)" />
+        <el-step v-for="(s, i) in STEPS" :key="s" :title="STEP_TITLES[s]" class="cursor-pointer" @click="i < step && (step = i)" />
       </el-steps>
     </el-card>
 
     <!-- 1. Goal -->
-    <el-card v-show="step === 0" shadow="never" header="1. Mục tiêu của luồng">
-      <el-form label-position="top" class="max-w-2xl">
+    <el-card v-show="cur === 'goal'" shadow="never" header="1. Mục tiêu của luồng">
+      <el-form label-position="top" class="max-w-3xl">
+        <el-form-item label="Luồng này làm gì?">
+          <div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
+            <button type="button" class="kind-card" :class="{ active: kind === 'sources' }" :disabled="!!editId" @click="chooseKind('sources')">
+              <div class="font-semibold">📥 Kéo dữ liệu từ nguồn có sẵn</div>
+              <div class="mt-1 text-xs text-gray-500">
+                Website bất kỳ (theo link, có thể tìm theo từ khoá), Facebook group, Google, YouTube, TikTok, Threads, Shopee. Không cần viết script.
+              </div>
+            </button>
+            <button type="button" class="kind-card" :class="{ active: kind === 'script' }" :disabled="!!editId" @click="chooseKind('script')">
+              <div class="font-semibold">🧩 Tự viết script</div>
+              <div class="mt-1 text-xs text-gray-500">
+                Làm bất cứ việc gì trên trang: đăng nhập, điền form, đăng bài, lấy dữ liệu theo selector riêng… (có AI hỗ trợ viết).
+              </div>
+            </button>
+          </div>
+        </el-form-item>
         <el-form-item label="Tên luồng">
           <el-input v-model="goal.name" placeholder="Ví dụ: Lấy bài mới trong nhóm Cầu lông HN" />
         </el-form-item>
         <el-form-item label="Mô tả (không bắt buộc)">
           <el-input v-model="goal.description" type="textarea" :rows="3" placeholder="Luồng này làm gì, lấy dữ liệu gì, chạy khi nào…" />
         </el-form-item>
-        <el-form-item label="Trang có cần đăng nhập không?">
+        <el-form-item v-if="kind === 'script'" label="Trang có cần đăng nhập không?">
           <el-radio-group v-model="goal.needsLogin">
             <el-radio :value="false">Không: trang công khai</el-radio>
             <el-radio :value="true">Có: cần tài khoản (Facebook, Shopee…)</el-radio>
@@ -344,8 +417,13 @@ watch(scriptId, async (id) => {
       </el-form>
     </el-card>
 
+    <!-- 2. Sources -->
+    <el-card v-show="cur === 'sources'" shadow="never" header="2. Nguồn dữ liệu">
+      <SourcesEditor v-model="sources" :profiles="profiles" :catalog="catalog" />
+    </el-card>
+
     <!-- 2. Profile -->
-    <el-card v-show="step === 1" shadow="never" header="2. Profile (Chrome giữ đăng nhập)">
+    <el-card v-show="cur === 'profile'" shadow="never" header="2. Profile (Chrome giữ đăng nhập)">
       <el-radio-group v-model="profileMode" class="mb-4">
         <el-radio-button value="existing" :disabled="!profiles.length">Dùng profile có sẵn</el-radio-button>
         <el-radio-button value="new">Tạo profile mới</el-radio-button>
@@ -370,6 +448,12 @@ watch(scriptId, async (id) => {
         <el-form label-position="top" class="grid max-w-3xl grid-cols-2 gap-x-4">
           <el-form-item label="Tên profile"><el-input v-model="newProfile.name" placeholder="facebook-phu" /></el-form-item>
           <el-form-item label="Ghi chú"><el-input v-model="newProfile.notes" /></el-form-item>
+          <el-form-item label="Lưu phiên đăng nhập ở đâu" class="col-span-2">
+            <el-radio-group v-model="newProfile.mode">
+              <el-radio value="folder">Thư mục Chrome (đầy đủ nhất, 1 task mỗi lúc)</el-radio>
+              <el-radio value="session">Trong database (chạy song song)</el-radio>
+            </el-radio-group>
+          </el-form-item>
           <el-form-item label="Proxy (không bắt buộc)" class="col-span-2">
             <el-input v-model="newProfile.proxyServer" placeholder="http://host:port hoặc socks5://host:port" />
           </el-form-item>
@@ -386,12 +470,17 @@ watch(scriptId, async (id) => {
 
       <div v-if="profileMode !== 'none' && selectedProfile" class="mt-4">
         <div class="mb-2 text-sm font-medium">Đăng nhập cho profile "{{ selectedProfile.name }}" (bỏ qua nếu đã đăng nhập trước đó)</div>
-        <ProfileLoginBox :key="selectedProfile._id" :profile-id="selectedProfile._id" :profile-name="selectedProfile.name" />
+        <ProfileLoginBox
+          :key="selectedProfile._id"
+          :profile-id="selectedProfile._id"
+          :profile-name="selectedProfile.name"
+          :login-url="selectedProfile.loginUrl"
+        />
       </div>
     </el-card>
 
     <!-- 3. Script -->
-    <el-card v-show="step === 2" shadow="never" header="3. Script (làm gì trên trang)">
+    <el-card v-show="cur === 'script'" shadow="never" header="3. Script (làm gì trên trang)">
       <el-radio-group v-model="scriptMode" class="mb-4">
         <el-radio-button value="new">Tạo script mới</el-radio-button>
         <el-radio-button value="existing" :disabled="!scripts.length">Dùng script có sẵn</el-radio-button>
@@ -444,7 +533,12 @@ watch(scriptId, async (id) => {
     </el-card>
 
     <!-- 4. Job & tasks -->
-    <el-card v-show="step === 3" shadow="never" header="4. Job & task (chạy với những đầu vào nào)">
+    <el-card v-show="cur === 'run'" shadow="never" :header="kind === 'sources' ? '3. Cách chạy' : '4. Job & task (chạy với những đầu vào nào)'">
+      <div v-if="kind === 'sources'" class="mb-2 text-sm text-gray-600">
+        Mỗi lần chạy tạo <b>{{ sources.length }} job</b> (mỗi nguồn một job), tổng <b>{{ sourcesTaskCount }} task</b> (mỗi link / từ khoá một task).
+        Các thiết lập dưới đây áp dụng cho từng job.
+      </div>
+      <template v-if="kind === 'script'">
       <AiAssistPanel
         kind="job"
         class="!mb-4"
@@ -472,12 +566,13 @@ watch(scriptId, async (id) => {
         <el-table-column type="index" label="Task" width="60" />
         <el-table-column v-for="c in inputColumns" :key="c" :label="c" :prop="c" show-overflow-tooltip />
       </el-table>
+      </template>
 
       <div class="mt-4 grid grid-cols-1 gap-x-6 md:grid-cols-3">
         <el-form label-position="top">
           <el-form-item label="Chạy song song (concurrency)">
-            <el-input-number v-model="run.concurrency" :min="1" :max="50" :disabled="!!profileId" />
-            <div v-if="profileId" class="text-xs text-gray-500">Dùng profile: các task chạy lần lượt.</div>
+            <el-input-number v-model="run.concurrency" :min="1" :max="50" :disabled="sequential" />
+            <div v-if="sequential" class="text-xs text-gray-500">Profile lưu ở thư mục Chrome: các task chạy lần lượt.</div>
           </el-form-item>
         </el-form>
         <el-form label-position="top">
@@ -490,7 +585,7 @@ watch(scriptId, async (id) => {
           <el-form-item label="Timeout bước (s)"><el-input-number v-model="run.stepTimeout" :min="1" :max="600" /></el-form-item>
         </el-form>
       </div>
-      <el-form label-position="top">
+      <el-form v-if="kind === 'script'" label-position="top">
         <el-form-item label="Biến dùng chung cho mọi task (JSON, không bắt buộc)">
           <el-input v-model="run.varsText" type="textarea" :rows="2" class="font-mono" placeholder='{ "scrolls": 20 }' />
         </el-form-item>
@@ -498,17 +593,36 @@ watch(scriptId, async (id) => {
     </el-card>
 
     <!-- 5. Confirm -->
-    <el-card v-show="step === 4" shadow="never" header="5. Xác nhận">
+    <el-card v-show="cur === 'confirm'" shadow="never" :header="kind === 'sources' ? '4. Xác nhận' : '5. Xác nhận'">
       <el-descriptions :column="1" border>
         <el-descriptions-item label="Luồng">{{ goal.name }}<div class="text-xs text-gray-500">{{ goal.description }}</div></el-descriptions-item>
-        <el-descriptions-item label="Profile">{{ profileMode === 'none' ? 'Không dùng (Chrome mới cho mỗi task)' : selectedProfile?.name }}</el-descriptions-item>
-        <el-descriptions-item label="Script">{{ finalScriptName }}</el-descriptions-item>
-        <el-descriptions-item label="Task">{{ taskCount }} task mỗi lần chạy</el-descriptions-item>
+        <template v-if="kind === 'sources'">
+          <el-descriptions-item label="Nguồn">
+            <div v-for="(src, i) in sources" :key="i" class="py-0.5">
+              <b>{{ sourceLabel(src) }}</b>: {{ nonEmpty(src.targets).join(', ') }}
+              <span v-if="nonEmpty(src.keywords).length"> · từ khoá: {{ nonEmpty(src.keywords).join(', ') }}</span>
+              <span class="text-gray-500">
+                · {{ src.limit }} mục{{ src.detail ? ' · có chi tiết' : '' }}{{
+                  src.profileId ? ` · profile ${profiles.find((p) => p._id === src.profileId)?.name ?? ''}` : ''
+                }}
+              </span>
+            </div>
+          </el-descriptions-item>
+          <el-descriptions-item label="Task">{{ sourcesTaskCount }} task ({{ sources.length }} job) mỗi lần chạy</el-descriptions-item>
+        </template>
+        <template v-else>
+          <el-descriptions-item label="Profile">{{ profileMode === 'none' ? 'Không dùng (Chrome mới cho mỗi task)' : selectedProfile?.name }}</el-descriptions-item>
+          <el-descriptions-item label="Script">{{ finalScriptName }}</el-descriptions-item>
+          <el-descriptions-item label="Task">{{ taskCount }} task mỗi lần chạy</el-descriptions-item>
+        </template>
         <el-descriptions-item label="Cách chạy">
-          {{ profileId ? 'lần lượt (profile)' : `${run.concurrency} song song` }} · {{ run.headless ? 'headless' : 'headed' }} · retries
-          {{ run.maxRetries }} · timeout {{ run.stepTimeout }}s
+          {{ sequential && kind === 'script' ? 'lần lượt (profile thư mục)' : `${run.concurrency} song song` }} · {{ run.headless ? 'headless' : 'headed' }} ·
+          retries {{ run.maxRetries }} · timeout {{ run.stepTimeout }}s
         </el-descriptions-item>
-        <el-descriptions-item label="Dữ liệu">Kết quả mỗi lần chạy được tự lưu vào trang <b>Dữ liệu</b>, gộp các mục trùng nhau.</el-descriptions-item>
+        <el-descriptions-item label="Dữ liệu">
+          Kết quả mỗi lần chạy được tự lưu vào trang <b>Dữ liệu</b>{{ kind === 'sources' ? ', mỗi nguồn một bảng (website, youtube…)' : '' }}, gộp các
+          mục trùng nhau.
+        </el-descriptions-item>
       </el-descriptions>
       <div class="mt-4 flex gap-2">
         <el-button :loading="saving" @click="finish(false)">Lưu luồng</el-button>
@@ -522,3 +636,28 @@ watch(scriptId, async (id) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+.kind-card {
+  text-align: left;
+  border: 1px solid var(--el-border-color);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s;
+}
+.kind-card:hover:not(:disabled) {
+  border-color: var(--el-color-primary-light-5);
+}
+.kind-card.active {
+  border-color: var(--el-color-primary);
+  box-shadow: 0 0 0 3px var(--el-color-primary-light-8);
+}
+.kind-card:disabled:not(.active) {
+  cursor: default;
+  opacity: 0.5;
+}
+</style>

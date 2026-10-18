@@ -195,12 +195,12 @@ Empty = a single task with no inputs.'
             <el-input v-model="form.name" :placeholder="selectedScript?.name ?? 'Ad-hoc job'" />
           </el-form-item>
           <el-form-item label="Chạy song song (số Chrome)">
-            <el-input-number v-model="form.concurrency" :min="1" :max="50" :disabled="!!form.profileId" />
+            <el-input-number v-model="form.concurrency" :min="1" :max="50" :disabled="profiles.find((p) => p._id === form.profileId)?.mode === 'folder'" />
           </el-form-item>
           <el-form-item label="Hiện cửa sổ Chrome">
             <el-switch v-model="form.headless" :active-value="false" :inactive-value="true" active-text="headed" inactive-text="headless" />
           </el-form-item>
-          <el-form-item label="Profile (giữ đăng nhập; task chạy lần lượt)">
+          <el-form-item label="Profile (giữ đăng nhập)">
             <el-select v-model="form.profileId" clearable placeholder="Không dùng: Chrome mới cho mỗi task" class="!w-full">
               <el-option v-for="p in profiles" :key="p._id" :label="p.name" :value="p._id" :disabled="p.inUse" />
             </el-select>
