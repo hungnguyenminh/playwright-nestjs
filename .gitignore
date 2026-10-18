@@ -1,0 +1,37 @@
+# compiled output
+dist
+node_modules
+/build
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/*
+!.vscode/settings.json
+
+# Tests
+/coverage
+/test-results
+/playwright-report
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Backend runtime data
+/backend/dist
+/backend/storage
+/backend/storage-test
+/backend/profiles
+
+# Nuxt
+/frontend/.nuxt
+/frontend/.output
+/frontend/.data
+/frontend/dist
