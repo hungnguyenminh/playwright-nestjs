@@ -32,6 +32,7 @@ async function open() {
       method: 'POST',
       body: {
         name: `Login: ${props.profileName}`,
+        category: 'login',
         profileId: props.profileId,
         headless: false,
         stepTimeout: 60_000,

@@ -48,6 +48,10 @@ export class Profile {
   /** Page last used with "Mở để đăng nhập", offered again next time. */
   @Prop({ type: String, default: '' })
   loginUrl: string;
+
+  /** Set by publishing when the site asked to log in again: left out of account rotation until cleared. */
+  @Prop({ type: SchemaTypes.Mixed })
+  health?: { needsLogin?: boolean; lastError?: string; checkedAt?: Date };
 }
 
 export type ProfileDocument = HydratedDocument<Profile>;

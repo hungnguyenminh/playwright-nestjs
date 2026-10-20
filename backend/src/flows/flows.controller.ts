@@ -1,16 +1,23 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, Post, Put, Query } from '@nestjs/common';
+import { IsBoolean } from 'class-validator';
 import { PageQuery } from '../common/pagination.js';
 import { ParseObjectIdPipe } from '../common/parse-object-id.pipe.js';
 import { FlowDto, RunFlowDto } from './flow.dto.js';
 import { FlowsService } from './flows.service.js';
 
+class AutoRunToggleDto {
+  @IsBoolean()
+  enabled: boolean;
+}
+
 @Controller('flows')
 export class FlowsController {
   constructor(private readonly flows: FlowsService) {}
 
+  /** `?kind=sources,pipeline` filters by kind. */
   @Get()
-  list() {
-    return this.flows.list();
+  list(@Query('kind') kind?: string) {
+    return this.flows.list(kind);
   }
 
   @Get(':id')
@@ -39,8 +46,20 @@ export class FlowsController {
     return this.flows.run(id, dto);
   }
 
+  @Post(':id/auto-run')
+  @HttpCode(200)
+  autoRun(@Param('id', ParseObjectIdPipe) id: string, @Body() dto: AutoRunToggleDto) {
+    return this.flows.setAutoRun(id, dto.enabled);
+  }
+
   @Get(':id/jobs')
   jobs(@Param('id', ParseObjectIdPipe) id: string, @Query() q: PageQuery) {
     return this.flows.listJobs(id, q);
+  }
+
+  /** Runs of source / pipeline flows: jobs, new rows, posts written. */
+  @Get(':id/runs')
+  runs(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.flows.listRuns(id);
   }
 }

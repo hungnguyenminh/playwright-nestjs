@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import {
-  Coin,
   DataBoard,
+  Download,
   Document,
   Expand,
   Fold,
   Guide,
   List,
-  Plus,
+  Promotion,
   QuestionFilled,
+  Refresh,
   Setting,
+  Tickets,
   User,
 } from '@element-plus/icons-vue';
 import { useLiveStore } from '~/stores/live';
@@ -37,32 +39,39 @@ const groups = [
     title: 'Vận hành',
     items: [
       { to: '/', label: 'Dashboard', icon: DataBoard },
-      { to: '/flows', label: 'Luồng', icon: Guide },
-      { to: '/jobs', label: 'Jobs', icon: List },
-      { to: '/jobs/new', label: 'New job', icon: Plus },
-      { to: '/data', label: 'Dữ liệu', icon: Coin },
+      { to: '/flows', label: 'Kéo dữ liệu', icon: Download },
+      { to: '/publish', label: 'Đăng bài', icon: Promotion },
+      { to: '/pipelines', label: 'Kéo → Đăng', icon: Refresh },
     ],
   },
   {
     title: 'Tài nguyên',
     items: [
-      { to: '/scripts', label: 'Scripts', icon: Document },
       { to: '/profiles', label: 'Profiles', icon: User },
+      { to: '/scripts', label: 'Scripts', icon: Document },
+      { to: '/script-flows', label: 'Luồng script', icon: Guide },
     ],
   },
   {
     title: 'Hệ thống',
     items: [
+      { to: '/jobs', label: 'Lịch sử chạy', icon: List },
+      { to: '/activity', label: 'Nhật ký hoạt động', icon: Tickets },
       { to: '/settings', label: 'Cài đặt', icon: Setting },
       { to: '/guide', label: 'Hướng dẫn', icon: QuestionFilled },
     ],
   },
 ];
+/** Pages that belong to a menu entry without sharing its path. */
+const ALIAS: Array<[RegExp, string]> = [
+  [/^\/data(\/|$)/, '/flows'],
+  [/^\/tasks\//, '/jobs'],
+];
 const items = groups.flatMap((g) => g.items);
 
 const active = computed(() => {
-  const path = route.path.startsWith('/tasks/') ? '/jobs' : route.path;
-  // Longest prefix wins, so /jobs/new beats /jobs.
+  const path = ALIAS.find(([re]) => re.test(route.path))?.[1] ?? route.path;
+  // Longest prefix wins.
   const match = [...items]
     .sort((a, b) => b.to.length - a.to.length)
     .find((m) => (m.to === '/' ? path === '/' : path === m.to || path.startsWith(m.to + '/')));

@@ -1,3 +1,4 @@
+import { ActivityService } from '../activity/activity.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -40,6 +41,7 @@ export class ProfilesService implements OnApplicationBootstrap {
     @InjectModel(Profile.name) private readonly profiles: Model<Profile>,
     private readonly pool: BrowserPoolService,
     private readonly box: SecretBox,
+    private readonly activity: ActivityService,
   ) {}
 
   /**
@@ -148,6 +150,17 @@ export class ProfilesService implements OnApplicationBootstrap {
     await this.saveSession(id, state);
     await this.profiles.updateOne({ _id: id }, { mode: 'session' });
     return this.get(id);
+  }
+
+  async markNeedsLogin(id: string, error: string) {
+    await this.profiles.updateOne({ _id: id }, { health: { needsLogin: true, lastError: error.slice(0, 300), checkedAt: new Date() } });
+    const p = await this.profiles.findById(id, { name: 1 }).lean();
+    this.activity.log({ actor: 'system', level: 'warn', category: 'profile', action: 'profile.needsLogin', summary: `Profile "${p?.name ?? id}" cần đăng nhập lại, tạm bỏ khỏi vòng xoay đăng bài`, target: { type: 'profile', id, name: p?.name }, details: { error } });
+  }
+
+  async clearHealth(id: string) {
+    const res = await this.profiles.updateOne({ _id: id }, { $unset: { health: 1 } });
+    if (!res.matchedCount) throw new NotFoundException('Profile not found');
   }
 
   async clearSession(id: string) {

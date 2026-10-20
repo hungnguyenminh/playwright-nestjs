@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { PageQuery } from '../common/pagination.js';
 import { ParseObjectIdPipe } from '../common/parse-object-id.pipe.js';
-import { CreateJobDto } from './job.dto.js';
+import { CreateJobDto, JobQuery } from './job.dto.js';
 import { JobsService } from './jobs.service.js';
 
 @Controller('jobs')
@@ -23,7 +23,7 @@ export class JobsController {
   }
 
   @Get()
-  list(@Query() q: PageQuery) {
+  list(@Query() q: JobQuery) {
     return this.jobs.list(q);
   }
 

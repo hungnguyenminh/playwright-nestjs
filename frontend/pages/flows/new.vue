@@ -20,7 +20,7 @@ const STEP_TITLES: Record<StepKey, string> = {
   run: 'Job & task',
   confirm: 'Xác nhận',
 };
-const kind = ref<Flow['kind']>('sources');
+const kind = ref<Flow['kind']>(route.query.kind === 'script' ? 'script' : 'sources');
 const STEPS = computed<StepKey[]>(() =>
   kind.value === 'sources' ? ['goal', 'sources', 'run', 'confirm'] : ['goal', 'profile', 'script', 'run', 'confirm'],
 );
@@ -204,6 +204,8 @@ useLiveEvent<TaskPatch>('task:update', (p) => {
 
 // ---- job & tasks --------------------------------------------------------------
 const run = reactive({ inputsText: '', varsText: '', concurrency: 3, headless: true, maxRetries: 0, stepTimeout: 30 });
+/** Run by itself every N hours / days. */
+const auto = reactive({ enabled: false, every: 6, unit: 'hour' as 'hour' | 'day', useHours: false, from: '07:00', to: '23:00' });
 
 const activeActions = computed(() => {
   if (scriptMode.value === 'existing') return selectedScript.value?.actions ?? [];
@@ -281,10 +283,6 @@ async function next() {
   step.value = Math.min(step.value + 1, STEPS.value.length - 1);
 }
 
-function chooseKind(k: Flow['kind']) {
-  kind.value = k;
-  step.value = 0;
-}
 const back = () => (step.value = Math.max(0, step.value - 1));
 
 const finalScriptId = computed(() => (scriptMode.value === 'new' ? draftScriptId.value : scriptId.value));
@@ -306,6 +304,7 @@ async function finish(runNow: boolean) {
     headless: run.headless,
     maxRetries: run.maxRetries,
     stepTimeout: run.stepTimeout,
+    autoRun: { enabled: auto.enabled, every: auto.every, unit: auto.unit, ...(auto.useHours ? { activeHours: { from: auto.from, to: auto.to } } : {}) },
   };
   const body =
     kind.value === 'sources'
@@ -355,6 +354,9 @@ onMounted(async () => {
     maxRetries: flow.maxRetries,
     stepTimeout: flow.stepTimeout,
   });
+  if (flow.autoRun) {
+    Object.assign(auto, { enabled: flow.autoRun.enabled, every: flow.autoRun.every, unit: flow.autoRun.unit, useHours: !!flow.autoRun.activeHours, ...(flow.autoRun.activeHours ?? {}) });
+  }
 });
 
 // Selected script's full actions (list endpoint omits them).
@@ -374,34 +376,18 @@ watch(scriptId, async (id) => {
           ? 'Đi qua từng bước: mục tiêu → nguồn → cách chạy → xác nhận.'
           : 'Đi qua từng bước: mục tiêu → profile → script → job & task → xác nhận.'
       "
-      back="/flows"
+      :back="kind === 'script' ? '/script-flows' : '/flows'"
     />
 
     <el-card shadow="never">
       <el-steps :active="step" finish-status="success" align-center>
-        <el-step v-for="(s, i) in STEPS" :key="s" :title="STEP_TITLES[s]" class="cursor-pointer" @click="i < step && (step = i)" />
+        <el-step v-for="(s, i) in STEPS" :key="s" :title="s === 'run' && kind === 'sources' ? 'Cách chạy' : STEP_TITLES[s]" class="cursor-pointer" @click="i < step && (step = i)" />
       </el-steps>
     </el-card>
 
     <!-- 1. Goal -->
     <el-card v-show="cur === 'goal'" shadow="never" header="1. Mục tiêu của luồng">
       <el-form label-position="top" class="max-w-3xl">
-        <el-form-item label="Luồng này làm gì?">
-          <div class="grid w-full grid-cols-1 gap-3 md:grid-cols-2">
-            <button type="button" class="kind-card" :class="{ active: kind === 'sources' }" :disabled="!!editId" @click="chooseKind('sources')">
-              <div class="font-semibold">📥 Kéo dữ liệu từ nguồn có sẵn</div>
-              <div class="mt-1 text-xs text-gray-500">
-                Website bất kỳ (theo link, có thể tìm theo từ khoá), Facebook group, Google, YouTube, TikTok, Threads, Shopee. Không cần viết script.
-              </div>
-            </button>
-            <button type="button" class="kind-card" :class="{ active: kind === 'script' }" :disabled="!!editId" @click="chooseKind('script')">
-              <div class="font-semibold">🧩 Tự viết script</div>
-              <div class="mt-1 text-xs text-gray-500">
-                Làm bất cứ việc gì trên trang: đăng nhập, điền form, đăng bài, lấy dữ liệu theo selector riêng… (có AI hỗ trợ viết).
-              </div>
-            </button>
-          </div>
-        </el-form-item>
         <el-form-item label="Tên luồng">
           <el-input v-model="goal.name" placeholder="Ví dụ: Lấy bài mới trong nhóm Cầu lông HN" />
         </el-form-item>
@@ -572,7 +558,11 @@ watch(scriptId, async (id) => {
         <el-form label-position="top">
           <el-form-item label="Chạy song song (concurrency)">
             <el-input-number v-model="run.concurrency" :min="1" :max="50" :disabled="sequential" />
-            <div v-if="sequential" class="text-xs text-gray-500">Profile lưu ở thư mục Chrome: các task chạy lần lượt.</div>
+            <div v-if="sequential && kind === 'script'" class="text-xs text-gray-500">Profile lưu ở thư mục Chrome: các task chạy lần lượt.</div>
+            <div v-else class="text-xs leading-snug text-gray-500">
+              Số task của mỗi job chạy cùng lúc, mỗi task một Chrome riêng; task còn lại chờ đến lượt.
+              Trang hay chặn bot (Google, TikTok, Shopee, Facebook) nên để 1.
+            </div>
           </el-form-item>
         </el-form>
         <el-form label-position="top">
@@ -590,6 +580,7 @@ watch(scriptId, async (id) => {
           <el-input v-model="run.varsText" type="textarea" :rows="2" class="font-mono" placeholder='{ "scrolls": 20 }' />
         </el-form-item>
       </el-form>
+      <AutoRunEditor v-model="auto" class="mt-4" />
     </el-card>
 
     <!-- 5. Confirm -->
@@ -637,27 +628,3 @@ watch(scriptId, async (id) => {
   </div>
 </template>
 
-<style scoped>
-.kind-card {
-  text-align: left;
-  border: 1px solid var(--el-border-color);
-  border-radius: 10px;
-  padding: 12px 14px;
-  background: #fff;
-  cursor: pointer;
-  transition:
-    border-color 0.15s,
-    box-shadow 0.15s;
-}
-.kind-card:hover:not(:disabled) {
-  border-color: var(--el-color-primary-light-5);
-}
-.kind-card.active {
-  border-color: var(--el-color-primary);
-  box-shadow: 0 0 0 3px var(--el-color-primary-light-8);
-}
-.kind-card:disabled:not(.active) {
-  cursor: default;
-  opacity: 0.5;
-}
-</style>

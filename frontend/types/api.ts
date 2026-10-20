@@ -26,7 +26,10 @@ export interface Script {
   updatedAt: string;
 }
 
+export type JobCategory = 'crawl' | 'pipeline' | 'publish' | 'script' | 'login' | 'manual';
+
 export interface Job {
+  category?: JobCategory;
   _id: string;
   name: string;
   scriptId?: string;
@@ -101,6 +104,8 @@ export interface Profile {
   proxy?: Emulation['proxy'];
   lastUsedAt?: string;
   inUse?: boolean;
+  /** Set by publishing when the site asked to log in again. */
+  health?: { needsLogin?: boolean; lastError?: string; checkedAt?: string };
   /** folder = Chrome user-data dir (one task at a time); session = cookies in the database (parallel). */
   mode: 'folder' | 'session';
   sessionCookies?: number;
@@ -173,7 +178,10 @@ export interface Flow {
   _id: string;
   name: string;
   description: string;
-  kind: 'script' | 'sources';
+  kind: 'script' | 'sources' | 'pipeline';
+  autoRun?: AutoRun;
+  generate?: GenerateSpec;
+  campaignId?: string;
   profileId?: string;
   scriptId?: string;
   sources: SourceSpec[];
@@ -218,4 +226,200 @@ export interface DataRecord {
   firstSeenAt: string;
   lastSeenAt: string;
   seenCount: number;
+}
+
+// ---- publishing ------------------------------------------------------------
+export type Platform = 'facebook' | 'youtube' | 'tiktok' | 'threads';
+export type PostStatus = 'draft' | 'ready' | 'archived';
+
+export interface Media {
+  _id: string;
+  name: string;
+  mime: string;
+  kind: 'image' | 'video';
+  size: number;
+  width?: number;
+  height?: number;
+  duration?: number;
+  sourceUrl?: string;
+  createdAt: string;
+}
+
+export interface PlatformOptions {
+  format?: string;
+  content?: string;
+  privacy?: string;
+  firstComment?: string;
+  title?: string;
+  description?: string;
+  tags?: string[];
+  thumbnailId?: string;
+  playlist?: string;
+  madeForKids?: boolean;
+  premiereAt?: string;
+  caption?: string;
+  coverId?: string;
+  allowComment?: boolean;
+  allowDuet?: boolean;
+  allowStitch?: boolean;
+  parts?: string[];
+  topic?: string;
+  replyControl?: string;
+}
+
+export interface PlatformInfo {
+  platform: Platform;
+  label: string;
+  formats: Array<{ value: string; label: string; hint: string }>;
+  textMax: number;
+  options: Record<string, { label: string; values?: Array<{ value: string; label: string }> }>;
+  limits: Record<string, number>;
+}
+
+export interface PostCheck {
+  platform: Platform;
+  format: string | null;
+  auto: boolean;
+  text: string;
+  counts: Record<string, { used: number; max: number }>;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface Post {
+  _id: string;
+  title: string;
+  content: string;
+  hashtags: string[];
+  mediaIds: string[];
+  link?: string;
+  platforms: Partial<Record<Platform, PlatformOptions>>;
+  status: PostStatus;
+  tags: string[];
+  origin: 'manual' | 'ai';
+  flowId?: string;
+  usedCount: number;
+  lastPublishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  media: Media[];
+  checks: Partial<Record<Platform, PostCheck>>;
+}
+
+export type PublicationStatus = 'scheduled' | 'waiting' | 'running' | 'published' | 'pending_approval' | 'failed' | 'unknown' | 'skipped' | 'cancelled';
+export type CampaignStatus = 'draft' | 'active' | 'paused' | 'done' | 'cancelled';
+
+export interface Destination {
+  platform: Platform;
+  kind: 'self' | 'page' | 'group';
+  url?: string;
+  profileIds: string[];
+  accountMode: 'all' | 'rotate';
+  rotate?: { strategy: 'roundRobin' | 'random' | 'leastRecent'; startOffset?: number };
+  limits: { minGapPerProfileMinutes: number; maxPerProfilePerDay: number; noRepeatPostDays: number };
+}
+
+export type Schedule =
+  | { mode: 'once'; at?: string }
+  | { mode: 'slots'; slots: Array<{ at: string; postId?: string }> }
+  | { mode: 'interval'; startAt: string; every: number; unit: 'minute' | 'hour' | 'day'; count?: number; jitterMinutes?: number; activeHours?: { from: string; to: string } };
+
+export interface CampaignForm {
+  name: string;
+  destinations: Destination[];
+  postSource: { type: 'list'; postIds: string[]; separate?: Record<string, string[]> } | { type: 'flow'; flowId: string };
+  order: 'sequential' | 'random';
+  whenExhausted: 'stop' | 'loop' | 'wait';
+  assignment: 'same' | 'rotate' | 'separate';
+  staggerMinutes: number;
+  minGapMinutes: number;
+  schedule: Schedule;
+  catchUp: 'shift' | 'skip';
+  headless: boolean;
+  dryRun: boolean;
+}
+
+export interface Campaign extends CampaignForm {
+  _id: string;
+  status: CampaignStatus;
+  flowId?: string;
+  log: Array<{ at: string; message: string }>;
+  createdAt: string;
+  updatedAt: string;
+  totals?: Partial<Record<PublicationStatus, number>>;
+  nextAt?: string | null;
+}
+
+export interface Publication {
+  _id: string;
+  campaignId: string;
+  campaignName?: string;
+  slot: number;
+  destIndex: number;
+  lane: string;
+  laneIndex: number;
+  platform: Platform;
+  kind: string;
+  url?: string;
+  profileId?: string;
+  plannedProfileId?: string;
+  profileName?: string;
+  postId?: string;
+  plannedPostId?: string;
+  postTitle?: string;
+  pinned: boolean;
+  attempts: Array<{ profileId: string; error?: string; at: string }>;
+  scheduledAt: string;
+  originalAt: string;
+  status: PublicationStatus;
+  waitReason?: string;
+  jobId?: string;
+  taskId?: string;
+  postUrl?: string;
+  error?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface CampaignPreview {
+  errors: string[];
+  warnings: string[];
+  publications: Array<{ slot: number; destIndex: number; lane: string; scheduledAt: string; plannedProfileId?: string; plannedPostId?: string }>;
+}
+
+export interface AutoRun {
+  enabled: boolean;
+  every: number;
+  unit: 'hour' | 'day';
+  activeHours?: { from: string; to: string };
+  nextRunAt?: string;
+}
+
+export interface GenerateSpec {
+  mode: 'perRecord' | 'digest';
+  digestSize?: number;
+  prompt: string;
+  tone?: string;
+  length?: 'short' | 'medium' | 'long';
+  language?: string;
+  platforms: Platform[];
+  maxPostsPerRun: number;
+  filter?: { datasets?: string[]; q?: string; requireImage?: boolean };
+  attachImage: boolean;
+  approval: 'review' | 'auto';
+}
+
+export interface FlowRun {
+  _id: string;
+  flowId: string;
+  runId: string;
+  status: 'crawling' | 'generating' | 'done' | 'failed';
+  trigger: 'manual' | 'auto';
+  jobs: number;
+  newRecords: number;
+  postsCreated: number;
+  skipped: number;
+  error?: string;
+  startedAt: string;
+  finishedAt?: string;
 }

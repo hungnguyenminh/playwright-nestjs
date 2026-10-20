@@ -1,6 +1,7 @@
 import {
   IsArray,
   IsBoolean,
+  IsIn,
   IsInt,
   IsMongoId,
   IsObject,
@@ -11,6 +12,8 @@ import {
 } from 'class-validator';
 import type { Action } from '../actions/action.types.js';
 import type { Emulation } from '../browser/emulation.js';
+import { PageQuery } from '../common/pagination.js';
+import { JOB_CATEGORIES, type JobCategory } from './schemas.js';
 
 export class CreateJobDto {
   @IsOptional()
@@ -35,6 +38,15 @@ export class CreateJobDto {
   @IsOptional()
   @IsString()
   source?: string;
+
+  @IsOptional()
+  @IsIn(['publish'])
+  kind?: 'publish';
+
+  /** Run history category; derived when omitted. */
+  @IsOptional()
+  @IsIn(JOB_CATEGORIES)
+  category?: JobCategory;
 
   /** ...or inline actions (wins over the script's actions if both are given). */
   @IsOptional()
@@ -81,4 +93,11 @@ export class CreateJobDto {
   @Min(1_000)
   @Max(600_000)
   stepTimeout?: number;
+}
+
+export class JobQuery extends PageQuery {
+  /** Comma-separated categories (crawl,pipeline,publish,script,login,manual). */
+  @IsOptional()
+  @IsString()
+  category?: string;
 }

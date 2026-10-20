@@ -4,6 +4,7 @@ import {
   Inject,
   Injectable,
   NotFoundException,
+  OnApplicationBootstrap,
 } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
@@ -14,9 +15,9 @@ import { Page, PageQuery } from '../common/pagination.js';
 import { appConfig, type AppConfig } from '../config/app.config.js';
 import { ProfilesService } from '../profiles/profiles.service.js';
 import { ScriptsService } from '../scripts/scripts.service.js';
-import { CreateJobDto } from './job.dto.js';
+import { CreateJobDto, JobQuery } from './job.dto.js';
 import { JobRunnerService } from './job-runner.service.js';
-import { emptyTotals, Job, Task, TaskLog } from './schemas.js';
+import { emptyTotals, Job, type JobCategory, Task, TaskLog } from './schemas.js';
 
 const oid = (id: string) => new Types.ObjectId(id);
 
@@ -41,7 +42,7 @@ async function paginate<T>(
 }
 
 @Injectable()
-export class JobsService {
+export class JobsService implements OnApplicationBootstrap {
   constructor(
     @InjectModel(Job.name) private readonly jobs: Model<Job>,
     @InjectModel(Task.name) private readonly tasks: Model<Task>,
@@ -52,6 +53,23 @@ export class JobsService {
     private readonly artifacts: ArtifactsService,
     private readonly runner: JobRunnerService,
   ) {}
+
+  /** Jobs made before categories existed get one (once). */
+  async onApplicationBootstrap() {
+    const missing = await this.jobs.find({ category: { $exists: false } }, { name: 1, kind: 1, flowId: 1, source: 1 }).lean();
+    if (!missing.length) return;
+    const flows = await this.jobs.db.collection('flows').find({}, { projection: { kind: 1 } }).toArray();
+    const flowKind = new Map(flows.map((f) => [String(f._id), f.kind as string | undefined]));
+    const categoryOf = (j: (typeof missing)[number]): JobCategory => {
+      if (j.kind === 'publish') return 'publish';
+      if (j.name.startsWith('Login: ')) return 'login';
+      const kind = j.flowId ? flowKind.get(String(j.flowId)) : undefined;
+      if (kind === 'pipeline') return 'pipeline';
+      if (kind === 'sources' || j.source) return 'crawl';
+      return j.flowId ? 'script' : 'manual';
+    };
+    await this.jobs.bulkWrite(missing.map((j) => ({ updateOne: { filter: { _id: j._id }, update: { category: categoryOf(j) } } })));
+  }
 
   async create(dto: CreateJobDto) {
     const script = dto.scriptId ? await this.scripts.get(dto.scriptId) : undefined;
@@ -72,6 +90,8 @@ export class JobsService {
       flowId: dto.flowId ? oid(dto.flowId) : undefined,
       runId: dto.runId ? oid(dto.runId) : undefined,
       source: dto.source,
+      kind: dto.kind,
+      category: dto.category ?? (dto.kind === 'publish' ? 'publish' : dto.flowId ? 'script' : 'manual'),
       actions,
       emulation: mergeEmulation(script?.emulation, profileEmulation, dto.emulation),
       profileId: dto.profileId ? oid(dto.profileId) : undefined,
@@ -95,8 +115,10 @@ export class JobsService {
     return job.toObject();
   }
 
-  list(q: PageQuery, flowId?: string) {
-    return paginate(this.jobs, flowId ? { flowId: oid(flowId) } : {}, q, { createdAt: -1 }, { actions: 0 });
+  list(q: JobQuery, flowId?: string) {
+    const filter: Record<string, unknown> = flowId ? { flowId: oid(flowId) } : {};
+    if (q.category) filter.category = { $in: q.category.split(',') };
+    return paginate(this.jobs, filter, q, { createdAt: -1 }, { actions: 0 });
   }
 
   async get(id: string) {
@@ -122,6 +144,11 @@ export class JobsService {
   async retry(id: string, useLatestScript = false) {
     const job = await this.get(id);
     if (this.runner.isRunning(id)) throw new ConflictException('Job is still running');
+    // Publishing jobs keep the publisher steps of the day they were made; re-running one would
+    // replay outdated steps (and could post twice). Start a new one from the post instead.
+    if (job.kind === 'publish') {
+      throw new BadRequestException('Job đăng bài không chạy lại được: vào trang bài viết bấm "Đăng thử" / "Đăng ngay", hoặc "Đăng lại" ở lượt đăng trong Lịch đăng');
+    }
     if (useLatestScript) {
       if (!job.scriptId) throw new BadRequestException('Job này chạy inline actions, không gắn với script nào');
       const script = await this.scripts.get(String(job.scriptId));

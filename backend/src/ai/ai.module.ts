@@ -19,5 +19,6 @@ import { PageSnapshotService } from './page-snapshot.service.js';
     PageSnapshotService,
     { provide: AI_CLIENT_FACTORY, useValue: defaultClientFactory },
   ],
+  exports: [PageSnapshotService],
 })
 export class AiModule {}

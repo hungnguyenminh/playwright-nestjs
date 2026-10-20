@@ -15,6 +15,14 @@ export type TaskStatus =
 
 export const FINISHED: readonly TaskStatus[] = ['done', 'failed', 'cancelled'];
 
+/**
+ * crawl: crawl flow / source test · pipeline: crawl of a crawl → publish flow ·
+ * publish: posting (schedule, "Đăng ngay", "Đăng thử") · script: script flow ·
+ * login: "Mở để đăng nhập" · manual: New job, script test runs and other ad-hoc jobs.
+ */
+export const JOB_CATEGORIES = ['crawl', 'pipeline', 'publish', 'script', 'login', 'manual'] as const;
+export type JobCategory = (typeof JOB_CATEGORIES)[number];
+
 export type Totals = Record<TaskStatus, number>;
 export const emptyTotals = (): Totals => ({
   queued: 0,
@@ -40,6 +48,14 @@ export class Job {
   /** Jobs started together by one run of a multi-source flow share this id. */
   @Prop({ type: SchemaTypes.ObjectId, index: true })
   runId?: Types.ObjectId;
+
+  /** 'publish': posts something (results are not data rows). */
+  @Prop({ type: String })
+  kind?: 'publish';
+
+  /** What started it, for the run history filter. */
+  @Prop({ type: String, index: true })
+  category?: JobCategory;
 
   /** Data source the job reads (website, youtube…), for source flows. */
   @Prop({ type: String })

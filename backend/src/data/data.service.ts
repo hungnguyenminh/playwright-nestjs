@@ -63,7 +63,8 @@ export class DataService implements OnApplicationBootstrap {
     if (!task?.result) return 0;
     const rows = toRecords(task.result, task);
     if (!rows.length) return 0;
-    const job = await this.jobs.findById(task.jobId, { name: 1, scriptId: 1, flowId: 1 }).lean();
+    const job = await this.jobs.findById(task.jobId, { name: 1, scriptId: 1, flowId: 1, kind: 1 }).lean();
+    if (job?.kind === 'publish') return 0;
     const scope = await this.scopeOf(job, task.jobId);
     const now = new Date();
     const ops: AnyBulkWriteOperation<DataRecord>[] = rows.map((r) => ({

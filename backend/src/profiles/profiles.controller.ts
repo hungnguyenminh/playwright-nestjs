@@ -27,6 +27,13 @@ export class ProfilesController {
     return this.profiles.update(id, dto);
   }
 
+  /** Remove the "needs to log in again" mark set by publishing (after logging in). */
+  @Post(':id/health/clear')
+  @HttpCode(204)
+  clearHealth(@Param('id', ParseObjectIdPipe) id: string) {
+    return this.profiles.clearHealth(id);
+  }
+
   /** Copy cookies + localStorage from the Chrome folder into the database (switches to session mode). */
   @Post(':id/import-session')
   @HttpCode(200)

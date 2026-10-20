@@ -44,6 +44,7 @@ export class SourcesController {
     return this.jobs.create({
       name: `Thử nguồn · ${built.name} · ${String(built.inputs[0]?.name ?? '')}`,
       source: dto.type,
+      category: 'crawl',
       actions: built.actions,
       inputs: built.inputs.slice(0, 1),
       vars: built.vars,

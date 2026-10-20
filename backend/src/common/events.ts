@@ -7,6 +7,8 @@ export const Events = {
   TaskLog: 'task.log',
   /** A running task switched to another tab, or got/lost its page. */
   TaskPage: 'task.page',
+  /** A publishing campaign's publication changed (status, account, time…). */
+  PublicationUpdated: 'publication.updated',
 } as const;
 
 export interface JobUpdatedEvent {

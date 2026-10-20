@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ActionsController } from './actions/actions.controller.js';
+import { ActivityModule } from './activity/activity.module.js';
 import { AiModule } from './ai/ai.module.js';
 import { ArtifactsModule } from './artifacts/artifacts.module.js';
 import { BrowserModule } from './browser/browser.module.js';
@@ -15,6 +16,9 @@ import { ProfilesModule } from './profiles/profiles.module.js';
 import { ScriptsModule } from './scripts/scripts.module.js';
 import { SettingsModule } from './settings/settings.module.js';
 import { SourcesModule } from './sources/sources.module.js';
+import { MediaModule } from './media/media.module.js';
+import { PostsModule } from './posts/posts.module.js';
+import { PublishModule } from './publish/publish.module.js';
 import { SystemController } from './system.controller.js';
 
 @Module({
@@ -22,6 +26,7 @@ import { SystemController } from './system.controller.js';
     ConfigModule.forRoot({ isGlobal: true, load: [appConfig] }),
     EventEmitterModule.forRoot(),
     DatabaseModule,
+    ActivityModule,
     BrowserModule,
     ScriptsModule,
     ProfilesModule,
@@ -33,6 +38,9 @@ import { SystemController } from './system.controller.js';
     FlowsModule,
     DataModule,
     SourcesModule,
+    MediaModule,
+    PostsModule,
+    PublishModule,
   ],
   controllers: [ActionsController, SystemController],
 })

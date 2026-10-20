@@ -101,4 +101,10 @@ export class LiveGateway implements OnGatewayInit, OnGatewayDisconnect {
   onLog(e: TaskLogEvent) {
     this.server.to(`task:${e.taskId}`).emit('task:log', e);
   }
+
+  /** Publishing views listen in the jobs room (they already subscribe to it). */
+  @OnEvent(Events.PublicationUpdated)
+  onPublication(e: { _id: string; campaignId: string }) {
+    this.server.to(JOBS_ROOM).emit('publication:update', e);
+  }
 }

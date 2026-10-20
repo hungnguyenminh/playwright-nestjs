@@ -7,6 +7,9 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
+    // One app at a time: every app marks the jobs still running in the shared
+    // test database as interrupted when it starts.
+    fileParallelism: false,
     // Set before any import: ConfigModule loads backend/.env at import time
     // but never overrides variables that already exist, so e2e tests can't
     // touch the real database, storage or saved secrets.

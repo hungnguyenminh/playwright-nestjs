@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DatasetSummary, Flow, Job, Profile, Script, SourceCatalog, SourceSpec } from '~/types/api';
+import type { DatasetSummary, Flow, FlowRun, Job, Profile, Script, SourceCatalog, SourceSpec } from '~/types/api';
 
 const route = useRoute();
 const id = computed(() => route.params.id as string);
@@ -19,9 +19,19 @@ const sourceTasks = (src: SourceSpec) => nonEmpty(src.targets).length * (src.typ
 const page = reactive({ page: 1, limit: 10 });
 const runs = useJobsList(() => ({ ...page }), `/flows/${id.value}/jobs`);
 
+const flowRuns = ref<FlowRun[]>([]);
+
+async function toggleAuto(enabled: boolean) {
+  if (!flow.value?.autoRun) return navigateTo(`/flows/new?id=${id.value}`);
+  const f = await tryApi(() => api<Flow>(`/flows/${id.value}/auto-run`, { method: 'POST', body: { enabled } }), enabled ? 'Đã bật tự chạy' : 'Đã tắt tự chạy');
+  if (f) flow.value = f;
+}
+
 async function load() {
   flow.value = await tryApi(() => api<Flow>(`/flows/${id.value}`));
   if (!flow.value) return;
+  if (flow.value.kind === 'pipeline') return navigateTo(`/pipelines/${id.value}`, { replace: true });
+  flowRuns.value = flow.value.kind === 'sources' ? ((await tryApi(() => api<FlowRun[]>(`/flows/${id.value}/runs`))) ?? []) : [];
   const [s, p, d, cat, ps] = await Promise.all([
     flow.value.scriptId ? tryApi(() => api<Script>(`/scripts/${flow.value!.scriptId}`)) : undefined,
     flow.value.profileId ? tryApi(() => api<Profile>(`/profiles/${flow.value!.profileId}`)) : undefined,
@@ -87,7 +97,7 @@ async function remove() {
 
 <template>
   <div v-if="flow" class="page">
-    <PageHeader :title="flow.name" :subtitle="flow.description || `${flow.runs} lần chạy`" back="/flows">
+    <PageHeader :title="flow.name" :subtitle="flow.description || `${flow.runs} lần chạy`" :back="flow.kind === 'script' ? '/script-flows' : '/flows'">
       <template #actions>
         <el-button type="primary" :loading="running" @click="runNow()">▶ Chạy ngay</el-button>
         <el-button v-if="!isSources" @click="openCustom">Chạy với input khác…</el-button>
@@ -165,6 +175,35 @@ async function remove() {
         </div>
       </el-card>
     </div>
+
+    <!-- auto-run -->
+    <el-card shadow="never" body-class="!py-3">
+      <div class="flex flex-wrap items-center gap-3 text-sm">
+        <el-switch :model-value="!!flow.autoRun?.enabled" @update:model-value="(v) => toggleAuto(!!v)" />
+        <span v-if="flow.autoRun">
+          Tự chạy mỗi {{ flow.autoRun.every }} {{ flow.autoRun.unit === 'day' ? 'ngày' : 'giờ' }}{{ flow.autoRun.activeHours ? ` (${flow.autoRun.activeHours.from}–${flow.autoRun.activeHours.to})` : '' }}
+          <span v-if="flow.autoRun.enabled && flow.autoRun.nextRunAt" class="text-slate-500">· lần tới {{ fmtDate(flow.autoRun.nextRunAt) }}</span>
+        </span>
+        <span v-else class="text-slate-500">Chưa đặt lịch tự chạy: bật để đặt trong phần Sửa luồng (bước Cách chạy).</span>
+      </div>
+    </el-card>
+
+    <el-card v-if="flowRuns.length" shadow="never" header="Lịch sử kéo dữ liệu" body-class="!p-0">
+      <el-table :data="flowRuns" size="small" max-height="320">
+        <el-table-column label="Bắt đầu" width="160"><template #default="{ row }">{{ fmtDate(row.startedAt) }}</template></el-table-column>
+        <el-table-column label="Cách chạy" width="110"><template #default="{ row }">{{ row.trigger === 'auto' ? 'tự động' : 'bấm tay' }}</template></el-table-column>
+        <el-table-column label="Trạng thái" width="130">
+          <template #default="{ row }">
+            <el-tag size="small" :type="row.status === 'done' ? 'success' : row.status === 'failed' ? 'danger' : 'primary'">
+              {{ ({ crawling: 'Đang kéo', generating: 'Đang viết bài', done: 'Xong', failed: 'Lỗi' } as Record<string, string>)[row.status] }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="Job" prop="jobs" width="70" align="center" />
+        <el-table-column label="Dòng mới" prop="newRecords" width="100" align="center" />
+        <el-table-column label="Ghi chú" min-width="200" show-overflow-tooltip><template #default="{ row }">{{ row.error ?? '' }}</template></el-table-column>
+      </el-table>
+    </el-card>
 
     <!-- runs -->
     <el-card shadow="never" :header="`Các lần chạy (${flow.runs})`" :body-class="runs.data.value.items.length ? '!p-0' : ''">

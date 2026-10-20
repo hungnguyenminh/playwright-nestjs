@@ -27,6 +27,8 @@ export const appConfig = registerAs('app', () => ({
   contextsPerBrowser: int(process.env.CONTEXTS_PER_BROWSER, 8),
   storageDir: resolve(process.env.STORAGE_DIR ?? './storage'),
   profilesDir: resolve(process.env.PROFILES_DIR || defaultProfilesDir()),
+  /** Largest media file (image / video for posts) accepted, in MB. */
+  mediaMaxMb: int(process.env.MEDIA_MAX_MB, 1024),
 }));
 
 export type AppConfig = ConfigType<typeof appConfig>;

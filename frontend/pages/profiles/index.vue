@@ -102,6 +102,12 @@ async function save() {
   }
 }
 
+/** Publishing skips accounts marked "needs to log in again"; clear it after logging in. */
+async function clearHealth(p: Profile) {
+  const ok = await ElMessageBox.confirm(`Đã đăng nhập lại "${p.name}"? Profile sẽ được dùng lại trong các lịch đăng.`, 'Bỏ đánh dấu', { confirmButtonText: 'Đã đăng nhập' }).catch(() => false);
+  if (ok && (await tryApi(() => api(`/profiles/${p._id}/health/clear`, { method: 'POST' }).then(() => true), 'Đã bỏ đánh dấu'))) p.health = undefined;
+}
+
 async function remove(p: Profile) {
   const ok = await ElMessageBox.confirm(
     `Xoá profile "${p.name}" cùng toàn bộ dữ liệu Chrome và phiên đăng nhập của nó?`,
@@ -154,6 +160,7 @@ async function openForLogin(p: Profile) {
       method: 'POST',
       body: {
         name: `Login: ${p.name}`,
+        category: 'login',
         profileId: p._id,
         headless: false,
         stepTimeout: 60_000,
@@ -208,8 +215,13 @@ async function openForLogin(p: Profile) {
         <el-table-column label="Dùng lần cuối" width="170">
           <template #default="{ row }">{{ row.lastUsedAt ? fmtDate(row.lastUsedAt) : '—' }}</template>
         </el-table-column>
-        <el-table-column label="" width="90">
-          <template #default="{ row }"><el-tag v-if="row.inUse" size="small" type="warning">đang dùng</el-tag></template>
+        <el-table-column label="" width="150">
+          <template #default="{ row }">
+            <el-tag v-if="row.inUse" size="small" type="warning">đang dùng</el-tag>
+            <el-tooltip v-if="row.health?.needsLogin" :content="`${row.health.lastError ?? ''} · đăng nhập lại rồi bấm để bỏ đánh dấu`">
+              <el-tag size="small" type="danger" class="cursor-pointer" @click="clearHealth(row as Profile)">cần đăng nhập lại ✕</el-tag>
+            </el-tooltip>
+          </template>
         </el-table-column>
         <el-table-column width="330" align="right" :fixed="isPhone ? false : 'right'">
           <template #default="{ row }">

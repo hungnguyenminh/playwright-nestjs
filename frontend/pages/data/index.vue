@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DataRecord, DatasetSummary, Paged } from '~/types/api';
+import type { DataRecord, DatasetSummary, GenerateSpec, Paged } from '~/types/api';
 
 /** Everything tasks collected, grouped by flow/script and result variable. */
 const route = useRoute();
@@ -96,6 +96,31 @@ async function removeDataset() {
   loadDatasets();
 }
 
+// ---- AI posts from selected rows ----------------------------------------------
+const picked = ref<DataRecord[]>([]);
+const gen = reactive({
+  open: false,
+  busy: false,
+  spec: { mode: 'perRecord', digestSize: 5, prompt: '', length: 'medium', platforms: ['facebook'], maxPostsPerRun: 20, attachImage: true, approval: 'review' } as GenerateSpec,
+});
+async function generatePosts() {
+  if (!gen.spec.platforms.length) return ElMessage.warning('Chọn nền tảng');
+  gen.busy = true;
+  const tag = `AI · ${selected.value?.scopeName ?? ''}`.slice(0, 60);
+  const res = await tryApi(() =>
+    api<{ created: Array<{ _id: string }>; skipped: unknown[]; errors: string[] }>('/posts/generate', {
+      method: 'POST',
+      body: { ...gen.spec, recordIds: picked.value.map((r) => r._id), tags: [tag] },
+    }),
+  );
+  gen.busy = false;
+  if (!res) return;
+  gen.open = false;
+  if (res.errors.length) ElMessage.warning({ message: res.errors.join('; '), duration: 8000 });
+  ElMessage.success(`AI đã viết ${res.created.length} bài${res.skipped.length ? `, bỏ qua ${res.skipped.length} dòng đã có bài` : ''}`);
+  if (res.created.length) navigateTo({ path: '/publish/posts', query: { tag } });
+}
+
 async function removeRow(r: DataRecord) {
   await tryApi(() => api(`/data/records/${r._id}`, { method: 'DELETE' }));
   loadRecords();
@@ -128,9 +153,10 @@ const shortUrl = (u: string) => {
 <template>
   <div class="page">
     <PageHeader
-      title="Dữ liệu đã lấy"
+      title="Kéo dữ liệu"
       subtitle="Kết quả của mọi task chạy xong, theo luồng / script. Mục trùng (cùng url hoặc id) được gộp; dữ liệu vẫn còn khi xoá job."
     />
+    <CrawlTabs />
 
     <el-empty v-if="!datasets.length" description="Chưa có dữ liệu. Chạy một luồng hoặc job, khi task xong kết quả sẽ hiện ở đây." />
 
@@ -167,12 +193,24 @@ const shortUrl = (u: string) => {
               <el-input v-model="query.q" placeholder="Tìm trong dữ liệu…" clearable size="small" class="!w-full sm:!w-56" />
               <el-button size="small" tag="a" :href="exportUrl('csv')">Tải CSV (Excel)</el-button>
               <el-button size="small" tag="a" :href="exportUrl('json')">Tải JSON</el-button>
+              <el-button size="small" type="primary" :disabled="!picked.length" @click="gen.open = true">
+                ✨ Tạo bài bằng AI{{ picked.length ? ` (${picked.length})` : '' }}
+              </el-button>
               <el-button size="small" type="danger" plain @click="removeDataset">Xoá bộ dữ liệu</el-button>
             </div>
           </div>
         </template>
 
-        <el-table v-loading="loading" :data="table.items" size="small" border max-height="640">
+        <el-table
+          v-loading="loading"
+          :data="table.items"
+          size="small"
+          border
+          max-height="640"
+          row-key="_id"
+          @selection-change="(rows: DataRecord[]) => (picked = rows)"
+        >
+          <el-table-column type="selection" width="40" reserve-selection />
           <el-table-column type="expand">
             <template #default="{ row }">
               <div class="space-y-2 p-2">
@@ -222,5 +260,13 @@ const shortUrl = (u: string) => {
         </div>
       </el-card>
     </div>
+
+    <el-dialog v-model="gen.open" :title="`AI viết bài từ ${picked.length} dòng đã chọn`" width="860px">
+      <GenerateEditor v-model="gen.spec" />
+      <template #footer>
+        <el-button @click="gen.open = false">Huỷ</el-button>
+        <el-button type="primary" :loading="gen.busy" @click="generatePosts">Viết bài</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>

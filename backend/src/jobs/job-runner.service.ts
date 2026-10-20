@@ -261,6 +261,8 @@ export class JobRunnerService implements OnApplicationBootstrap, OnModuleDestroy
     } catch (err) {
       if (signal.aborted) {
         await this.setTask(run, task, 'cancelled', {
+          // Partial outputs are kept (e.g. publishing's "submitted" flag).
+          result: entry.ctx?.result ?? null,
           finishedAt: new Date(),
           error: { message: 'Cancelled' },
         });
@@ -282,7 +284,7 @@ export class JobRunnerService implements OnApplicationBootstrap, OnModuleDestroy
         });
         return 'retry';
       }
-      await this.setTask(run, task, 'failed', { error, finishedAt: new Date() });
+      await this.setTask(run, task, 'failed', { error, result: entry.ctx?.result ?? null, finishedAt: new Date() });
       return 'failed';
     } finally {
       signal.removeEventListener('abort', closeOnAbort);
