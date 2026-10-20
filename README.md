@@ -121,7 +121,7 @@ POST /posts/generate { recordIds[], platforms[], mode, digestSize?, prompt?, ton
 
 ## Đăng bài (đang làm: xong giai đoạn 1 và 4 của plan)
 
-> Các bộ đăng thật (Facebook, Threads, TikTok, YouTube trong `backend/src/publish/publishers.ts`) **chưa được kiểm chứng trên tài khoản thật**. Hãy dùng *Đăng thử* (dừng ngay trước nút Đăng, xem trên live view) trước khi bật lịch đăng thật. Bộ lập lịch, xoay vòng tài khoản, chống spam và dời lịch đã được kiểm thử bằng trang đăng giả trên máy (`backend/test/publish.e2e-spec.ts`).
+> Bộ đăng **Facebook** đã kiểm chứng trên tài khoản thật (trang cá nhân; nhóm với bài chữ và bài có ảnh). Sau khi đăng, bộ đăng tự tìm bài vừa đăng trên bảng tin (hoặc trong "Nội dung của bạn" của nhóm) và lưu **link bài** vào lượt đăng; bài đang chờ duyệt thì chưa có link. Bộ đăng Threads, TikTok, YouTube (`backend/src/publish/publishers.ts`) **chưa được kiểm chứng trên tài khoản thật**. Hãy dùng *Đăng thử* (dừng ngay trước nút Đăng, xem trên live view) trước khi bật lịch đăng thật. Bộ lập lịch, xoay vòng tài khoản, chống spam và dời lịch đã được kiểm thử bằng trang đăng giả trên máy (`backend/test/publish.e2e-spec.ts`).
 
 **Lịch đăng** (tab *Lịch đăng*, wizard 4 bước: nơi đăng & tài khoản → bài viết → lịch → xác nhận):
 

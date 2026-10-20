@@ -12,9 +12,10 @@ import { DEFAULT_SELECTORS, selectorLabel } from './selectors.js';
  *   is never retried automatically (it may have been posted);
  * - dryRun pauses right before "Post" so the user can look at it in the live view.
  *
- * The real platform publishers drive the websites' current UI and have not
- * been verified against live accounts yet; selectors live here to be fixed
- * in one place.
+ * The real platform publishers drive the websites' current UI. Facebook was
+ * verified live on 2026-10-20 (own profile; group with text and with an image,
+ * link read back); Threads / TikTok / YouTube not yet. Selectors that may
+ * change are in selectors.ts.
  */
 export interface PublishInput {
   platform: Platform;
@@ -114,6 +115,59 @@ const FB = {
   switchToPage: 'div[role=button]:has-text("Chuyển ngay"), div[role=button]:has-text("Switch now"), div[role=button][aria-label="Chuyển"]',
 };
 
+/** First letters/digits of the post text: what to look for in the feed (emoji and punctuation render differently). */
+export const postFingerprint = (text: string) =>
+  text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]/gu, '')
+    .slice(0, 40);
+
+/**
+ * Finds the just-published post in the feed (by fingerprint) and returns its
+ * link, or null. Facebook only fills the timestamp link on hover (checked
+ * 2026-10-20: "3 phút" goes from "?__cft__…" to "/groups/…/posts/<id>/"),
+ * so the post's links are hovered first. Polls a few seconds while the feed updates.
+ */
+const FIND_POST_URL = String.raw`
+const norm = (s) => (s || '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+const pick = (hrefs) => {
+  for (const re of [/\/posts\/[\w.-]+/, /\/permalink\/\d+/, /story_fbid=/, /multi_permalinks=\d+/, /\/(videos|reel)\/\d+/]) {
+    const h = hrefs.find((x) => re.test(x));
+    if (!h) continue;
+    const u = new URL(h, location.origin);
+    const multi = u.searchParams.get('multi_permalinks');
+    if (multi) return u.origin + u.pathname.replace(/\/$/, '') + '/posts/' + multi.split(',')[0] + '/';
+    const keep = new URLSearchParams();
+    for (const k of ['story_fbid', 'id']) if (u.searchParams.get(k)) keep.set(k, u.searchParams.get(k));
+    return u.origin + u.pathname + (keep.toString() ? '?' + keep : '');
+  }
+  return null;
+};
+for (let i = 0; i < 8; i++) {
+  const posts = [...document.querySelectorAll('div[aria-posinset], [role=article]')].filter((el) => norm(el.innerText).includes(arg));
+  for (const post of posts) {
+    const links = [...post.querySelectorAll('a[href]')];
+    for (const a of links) for (const t of ['mouseover', 'mouseenter', 'pointerover', 'focusin']) a.dispatchEvent(new MouseEvent(t, { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 800));
+    const url = pick(links.map((a) => a.href));
+    if (url) return url;
+  }
+  await new Promise((r) => setTimeout(r, 1000));
+}
+return null;`;
+
+/** After posting: read the post's link on the current page, else on `fallback` (own posts list). Never fails the run. */
+const findPostUrl = (text: string, fallback: string): Action => {
+  const find: Action = { type: 'evaluate', label: 'Lấy link bài vừa đăng', script: FIND_POST_URL, arg: postFingerprint(text), as: 'postUrl' };
+  return {
+    type: 'try',
+    actions: [
+      find,
+      { type: 'if', condition: { not: { var: 'postUrl' } }, then: [{ type: 'goto', url: fallback }, wait(4_000), find] },
+    ],
+  };
+};
+
 function facebook(input: PublishInput): Action[] {
   const S = (key: string) => sel(input, `facebook.${key}`);
   const L = (text: string, key: string) => selectorLabel(text, `facebook.${key}`);
@@ -177,6 +231,8 @@ function facebook(input: PublishInput): Action[] {
       type: 'if',
       condition: { any: [{ textIncludes: { text: 'chờ phê duyệt' } }, { textIncludes: { text: 'đang chờ duyệt' } }, { textIncludes: { text: 'pending' } }] },
       then: [{ type: 'evaluate', script: 'return true', as: 'pending' }],
+      // A post waiting for approval isn't in the feed yet: no link to find.
+      else: [findPostUrl(input.text, input.kind === 'group' ? `${input.url!.split('?')[0].replace(/\/$/, '')}/my_posted_content` : target)],
     },
   ];
 }
